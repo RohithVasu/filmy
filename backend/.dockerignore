@@ -1,0 +1,26 @@
+# Ignore virtual environments
+.venv/
+
+# Ignore Git repo
+.git/
+.gitignore
+
+# Ignore Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Ignore logs, environment files, and build artifacts
+*.log
+.env
+.env.example
+*.egg-info/
+dist/
+build/
+
+# Ignore IDE settings
+.vscode/
+.idea/
+
+ops/
+data/

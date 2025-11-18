@@ -1,0 +1,23 @@
+production:
+  fastapi:
+    host: '0.0.0.0'
+    port: 8000
+
+  auth:
+    secret_key: 'b3a12af7f9e9428b88ad5c8c16cf13416a9b88b387cd480ac0032afbf8a7339c'
+    refresh_secret_key: 'z1a12af7f9e9428w88ad1c8g16cf13416aab88b387cd480acg03ghafb48a7339c'
+    algorithm: 'HS256'
+    access_token_expire_minutes: 30
+    refresh_token_expire_days: 7
+
+  db:
+    username: 'filmy'
+    host: 'filmy-postgres'
+    port: 5432
+    database: 'filmy_db'
+
+  qdrant:
+    url: 'http://filmy-qdrant:6333'
+    collection: 'movies'
+    search_limit: 5
+    scroll_limit: 10

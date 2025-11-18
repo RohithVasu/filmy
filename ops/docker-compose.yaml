@@ -1,0 +1,92 @@
+services:
+  # backend:
+  #   build:
+  #     context: ../backend
+  #     dockerfile: ops/Dockerfile
+  #   image: askdocs/backend:latest
+  #   container_name: askdocs-backend
+  #   restart: always
+  #   ports:
+  #     - "8000:8000"
+  #   environment:
+  #     ENV_FOR_DYNACONF: production
+  #   env_file:
+  #     - ../backend/.env.prod
+  #   depends_on:
+  #     - postgres
+  #     - qdrant
+  #     - redis
+  #   networks:
+  #     - askdocs-network
+  #   volumes:
+  #     - ../backend/data/documents:/app/data/documents
+
+  # frontend:
+  #   build:
+  #     context: ../frontend
+  #     dockerfile: ops/Dockerfile
+  #   image: askdocs/frontend:latest
+  #   container_name: askdocs-frontend
+  #   ports:
+  #     - "8001:8001"
+  #   restart: always
+  #   env_file:
+  #     - ../frontend/.env
+  #   depends_on:
+  #     - backend
+  #   networks:
+  #     - askdocs-network
+
+
+  postgres:
+    image: postgres:17
+    container_name: filmy-postgres
+    restart: always
+    environment:
+      POSTGRES_DB: filmy_db
+      POSTGRES_USER: filmy
+      POSTGRES_PASSWORD: filmy
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - filmy-network
+
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: filmy-pgadmin
+    restart: always
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@filmy.com
+      PGADMIN_DEFAULT_PASSWORD: Password@123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - filmy-network
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: filmy-qdrant
+    restart: always
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - filmy-network
+
+volumes:
+  postgres_data:
+  pgadmin_data:
+  qdrant_data:
+
+networks:
+  filmy-network:
+    name: filmy-network

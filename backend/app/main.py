@@ -1,0 +1,34 @@
+from fastapi import FastAPI, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from app.routes.auth import auth_router
+from app.routes.users import user_router
+from app.routes.user_feedback import user_feedback_router
+from app.routes.recommendation import recommendation_router
+from app.routes.movies import movie_router
+from app.dependencies.auth import get_current_user
+
+
+# Initialize FastAPI app
+app = FastAPI(
+    root_path="/filmy-api/v1",
+    title="Filmy API",
+    description="Visit http://0.0.0.0:8000/docs for API documentation",
+    version="0.0.1"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Register routers
+app.include_router(auth_router)
+app.include_router(user_router, dependencies=[Depends(get_current_user)])
+app.include_router(movie_router)
+app.include_router(recommendation_router)
+app.include_router(user_feedback_router, dependencies=[Depends(get_current_user)])
+
+
