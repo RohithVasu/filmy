@@ -110,7 +110,7 @@ class Qdrant:
         self,
         query: Optional[str] = None,
         movie_vector: Optional[np.ndarray] = None,
-        limit: int = 10,
+        top: int = 10,
         filters: Optional[Dict] = None,
     ) -> List[Dict]:
         """
@@ -158,7 +158,7 @@ class Qdrant:
             collection_name=self.collection_name,
             query_vector=vector,
             # query_filter=qdrant_filter,
-            limit=limit,
+            limit=top,
         )
 
         return [

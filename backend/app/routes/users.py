@@ -68,7 +68,7 @@ async def change_password(
         raise HTTPException(status_code=400, detail="Current password is incorrect")
     
     hashed_new = hash_password(new_password)
-    user_handler.update(user.id, UserUpdate(password=hashed_new))
+    user_handler.update(user.id, UserUpdate(hashed_password=hashed_new))
     
     return AppResponse(
         status="success",

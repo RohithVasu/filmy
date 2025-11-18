@@ -9,13 +9,12 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { useAuthStore } from "@/stores/authStore";
-import { authAPI } from "@/lib/api";
 import { LogOut, User, LayoutDashboard, Pencil, Trash } from "lucide-react";
 import { EditProfileModal } from "@/components/EditProfileModalWithTabs";
 import { DeleteAccountModal } from "@/components/DeleteAccountModal";
 
 const Navbar = () => {
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, logout } = useAuthStore();
   const navigate = useNavigate();
 
   const [editOpen, setEditOpen] = useState(false);
@@ -26,8 +25,8 @@ const Navbar = () => {
     else navigate("/");
   };
 
-  const logout = () => {
-    authAPI.logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/");
   };
 
@@ -37,12 +36,8 @@ const Navbar = () => {
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 backdrop-blur-cinematic bg-background/80">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
-
             {/* Logo */}
-            <div
-              onClick={handleLogoClick}
-              className="flex items-center gap-2 cursor-pointer"
-            >
+            <div onClick={handleLogoClick} className="flex items-center gap-2 cursor-pointer">
               <img
                 src="/filmy-icon.ico"
                 alt="Filmy Logo"
@@ -97,7 +92,7 @@ const Navbar = () => {
 
                       <DropdownMenuSeparator />
 
-                      <DropdownMenuItem onClick={logout}>
+                      <DropdownMenuItem onClick={handleLogout}>
                         <LogOut className="w-4 h-4 mr-2" />
                         Logout
                       </DropdownMenuItem>

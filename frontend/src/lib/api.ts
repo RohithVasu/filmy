@@ -1,86 +1,58 @@
-// src/lib/api.ts
 import axios, { AxiosError, AxiosHeaders, AxiosRequestConfig } from "axios";
+import { getAccessToken, getRefreshToken, refreshAccessToken, clearTokens, setTokens } from "@/lib/TokenManager";
 import { useAuthStore } from "@/stores/authStore";
+import { toast } from "sonner";
 
 const API_BASE_URL =
   import.meta.env.VITE_BASE_API_URL || "http://localhost:8000/filmy-api/v1";
 
-/* -----------------------------------------------------------
-   1. CREATE AXIOS INSTANCE
------------------------------------------------------------ */
 const api = axios.create({
   baseURL: API_BASE_URL,
 });
 
-/* -----------------------------------------------------------
-   2. REQUEST INTERCEPTOR (Attach Access Token)
------------------------------------------------------------ */
-api.interceptors.request.use(
-  (config) => {
-    const token = localStorage.getItem("access_token");
-    if (token) {
-      // Headers may be Raw or AxiosHeaders — normalize safely
-      if (config.headers instanceof AxiosHeaders) {
-        config.headers.set("Authorization", `Bearer ${token}`);
+// Attach access token to outgoing requests
+api.interceptors.request.use((config) => {
+  const token = getAccessToken();
+  if (token) {
+    if (config.headers instanceof AxiosHeaders) {
+      config.headers.set("Authorization", `Bearer ${token}`);
+    } else {
+      config.headers = {
+        ...(config.headers || {}),
+        Authorization: `Bearer ${token}`,
+      } as any;
+    }
+  }
+  return config;
+});
+
+// Single-refresh queue implementation
+let isRefreshing = false;
+let refreshPromise: Promise<string | null> | null = null;
+let failedQueue: {
+  resolve: (value?: any) => void;
+  reject: (error?: any) => void;
+  config: AxiosRequestConfig;
+}[] = [];
+
+const processQueue = (error: any, token: string | null = null) => {
+  failedQueue.forEach((p) => {
+    if (error) p.reject(error);
+    else {
+      if (p.config.headers instanceof AxiosHeaders) {
+        p.config.headers.set("Authorization", `Bearer ${token}`);
       } else {
-        config.headers = {
-          ...(config.headers || {}),
+        p.config.headers = {
+          ...(p.config.headers || {}),
           Authorization: `Bearer ${token}`,
         } as any;
       }
+      p.resolve(api(p.config));
     }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
+  });
+  failedQueue = [];
+};
 
-/* -----------------------------------------------------------
-   3. REFRESH TOKEN HANDLING (Safe, Single Refresh)
------------------------------------------------------------ */
-let isRefreshing = false;
-let refreshPromise: Promise<string | null> | null = null;
-
-async function refreshAccessToken(): Promise<string | null> {
-  if (isRefreshing && refreshPromise) return refreshPromise;
-
-  isRefreshing = true;
-  refreshPromise = (async () => {
-    try {
-      const refreshToken = localStorage.getItem("refresh_token");
-      if (!refreshToken) throw new Error("No refresh token");
-
-      const formData = new URLSearchParams();
-      formData.append("refresh_token", refreshToken);
-
-      const res = await axios.post(`${API_BASE_URL}/auth/refresh`, formData, {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      });
-
-      const data = res.data?.data || res.data;
-      const newToken = data?.access_token || data;
-
-      if (!newToken) throw new Error("Invalid refresh response");
-
-      localStorage.setItem("access_token", newToken);
-      return newToken;
-    } catch (err) {
-      // Refresh failed — cleanup & logout
-      localStorage.removeItem("access_token");
-      localStorage.removeItem("refresh_token");
-      useAuthStore.getState().logout();
-      return null;
-    } finally {
-      isRefreshing = false;
-      refreshPromise = null;
-    }
-  })();
-
-  return refreshPromise;
-}
-
-/* -----------------------------------------------------------
-   4. RESPONSE INTERCEPTOR (Auto Retry with Refresh)
------------------------------------------------------------ */
 api.interceptors.response.use(
   (res) => res,
   async (
@@ -91,38 +63,65 @@ api.interceptors.response.use(
     const originalRequest = error.config;
 
     if (
+      originalRequest?.url?.includes("/auth/login") ||
+      originalRequest?.url?.includes("/auth/register")
+    ) {
+      return Promise.reject(error); // pass to Login.tsx
+    }
+
+    // Normal refresh logic for all other API calls
+    if (
       error.response?.status === 401 &&
       originalRequest &&
       !originalRequest._retry
     ) {
       originalRequest._retry = true;
 
-      const newToken = await refreshAccessToken();
-      if (!newToken) {
-        if (typeof window !== "undefined") window.location.href = "/login";
-        return Promise.reject(error);
+      if (!isRefreshing) {
+        isRefreshing = true;
+        refreshPromise = (async () => {
+          try {
+            const newAccess = await refreshAccessToken();
+            return newAccess;
+          } catch (err) {
+            clearTokens();
+            useAuthStore.getState().handleSessionExpired(); // show modal
+            throw err;
+          } finally {
+            isRefreshing = false;
+            refreshPromise = null;
+          }
+        })();
       }
 
-      // Re-attach header safely
-      if (originalRequest.headers instanceof AxiosHeaders) {
-        originalRequest.headers.set("Authorization", `Bearer ${newToken}`);
-      } else {
-        originalRequest.headers = {
-          ...(originalRequest.headers || {}),
-          Authorization: `Bearer ${newToken}`,
-        } as any;
-      }
+      try {
+        const newToken = await refreshPromise;
 
-      return api(originalRequest);
+        // Retry queued requests
+        if (originalRequest.headers instanceof AxiosHeaders) {
+          originalRequest.headers.set("Authorization", `Bearer ${newToken}`);
+        } else {
+          originalRequest.headers = {
+            ...(originalRequest.headers || {}),
+            Authorization: `Bearer ${newToken}`,
+          };
+        }
+
+        return api(originalRequest);
+      } catch (err) {
+        return Promise.reject(err);
+      }
     }
 
     return Promise.reject(error);
   }
 );
 
-/* -----------------------------------------------------------
-   5. AUTH API
------------------------------------------------------------ */
+
+/* ---------------------------
+   High-level auth helpers
+   (authAPI)
+   --------------------------- */
 export const authAPI = {
   login: async (email: string, password: string) => {
     const formData = new URLSearchParams();
@@ -133,14 +132,14 @@ export const authAPI = {
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
     });
 
-    const data = response.data?.data || response.data;
-    const access_token = data?.access_token || data;
-    const refresh_token = data?.refresh_token;
-
-    if (access_token) localStorage.setItem("access_token", access_token);
-    if (refresh_token) localStorage.setItem("refresh_token", refresh_token);
-
-    return response.data;
+    // Return full response.data so caller can inspect status/message
+    const data = response.data;
+    // store tokens if present
+    const payload = data?.data || data;
+    const access_token = payload?.access_token;
+    const refresh_token = payload?.refresh_token;
+    if (access_token) setTokens({ access_token, refresh_token });
+    return data;
   },
 
   signup: async (
@@ -159,8 +158,7 @@ export const authAPI = {
   },
 
   logout: () => {
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("refresh_token");
+    clearTokens();
     useAuthStore.getState().logout();
   },
 
@@ -171,20 +169,27 @@ export const authAPI = {
 
   updateProfile: async (id: number, data: any) => {
     const response = await api.patch(`/users/${id}`, data);
-    return response.data;
+    return response.data.data;
   },
-  
+
   changePassword: async (current_password: string, new_password: string) => {
     const response = await api.post("/users/change-password", {
       current_password,
       new_password,
     });
     return response.data;
-  },  
+  },
+
+  deleteAccount: async (id: number) => {
+    // API returns 204 No Content in your spec; axios will set response.status
+    const response = await api.delete(`/users/${id}`);
+    return response;
+  },
+  
 };
 
 /* -----------------------------------------------------------
-   6. MOVIES API
+    MOVIES API
 ----------------------------------------------------------- */
 export const moviesAPI = {
   search: async (params: {
@@ -258,10 +263,10 @@ export const moviesAPI = {
     return response.data.data;
   },
 
-  getUserStats: async () => {
-    const response = await api.get("/feedbacks/stats");
-    return response.data;
-  },
+  // getUserStats: async () => {
+  //   const response = await api.get("/feedbacks/stats");
+  //   return response.data;
+  // },
 
   getPersonalizedRecommendations: async (params?: { limit?: number }) => {
     const searchParams = new URLSearchParams();
@@ -277,6 +282,18 @@ export const moviesAPI = {
     const response = await api.get("/recommendations/because-you-watched");
     return response.data;
   },
+};
+
+export const recommendationsAPI = {
+  guest: (params: any) => api.get("/recommendations/guest", { params }),
+  personalized: (limit = 10) => api.get("/recommendations/personalized", { params: { limit } }),
+  recent: (limit = 12) => api.get("/recommendations/recent", { params: { limit } }),
+  search: (query: string, limit = 20) => api.get("/recommendations/search", { params: { query, limit } }),
+};
+
+export const userAPI = {
+  genreDistribution: () => api.get("/feedbacks/genre-distribution"),
+  stats: () => api.get("/feedbacks/stats"),
 };
 
 export default api;
