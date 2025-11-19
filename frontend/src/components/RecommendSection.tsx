@@ -21,7 +21,7 @@ const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
 
 const GENRES = [
   "Action", "Adventure", "Animation", "Comedy", "Crime",
-  "Documentary", "Drama", "Family", "Fantasy", "History",
+  "Drama", "Family", "Fantasy", "History",
   "Horror", "Music", "Mystery", "Romance", "Sci-Fi",
   "Thriller", "War", "Western",
 ];
@@ -81,7 +81,7 @@ const RecommendSection = () => {
           release_year: m.release_year ? `${m.release_year}` : "",
           poster_url: m.poster_path
             ? `${TMDB_IMAGE_BASE}${m.poster_path}`
-            : "/placeholder-movie.jpg",
+            : "/poster-not-found.png",
         }));
 
         setRecommendations(formatted);
@@ -122,9 +122,8 @@ const RecommendSection = () => {
               setMode("genre");
               setMovieNames("");
             }}
-            className={`rounded-full px-6 text-base transition-all duration-300 ${
-              mode === "genre" ? "bg-primary text-white scale-105 shadow-lg" : ""
-            }`}
+            className={`rounded-full px-6 text-base transition-all duration-300 ${mode === "genre" ? "bg-primary text-white scale-105 shadow-lg" : ""
+              }`}
           >
             🎭 By Genre
           </Button>
@@ -153,11 +152,10 @@ const RecommendSection = () => {
                     key={genre}
                     type="button"
                     variant={selectedGenres.includes(genre) ? "default" : "outline"}
-                    className={`rounded-full text-sm ${
-                      selectedGenres.includes(genre)
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground"
-                    }`}
+                    className={`rounded-full text-sm ${selectedGenres.includes(genre)
+                      ? "bg-primary text-primary-foreground"
+                      : "text-muted-foreground"
+                      }`}
                     onClick={() => toggleGenre(genre)}
                   >
                     {genre}

@@ -90,33 +90,6 @@ async def get_user_stats(
         data=stats,
     )
 
-@user_feedback_router.get("/genre-distribution", response_model=AppResponse)
-def genre_distribution(
-    db: Session = Depends(get_global_db_session),
-    current_user: UserResponse = Depends(get_current_user)
-):
-    user_id = current_user.id
-    uf = UserFeedbackHandler(db)
-    movie_handler = MovieHandler(db)
-    feedbacks = uf.get_user_feedbacks(user_id)
-    counts = defaultdict(int)
-    for fb in feedbacks:
-        if fb.status != "watched":
-            continue
-        m = movie_handler.get_by_id_raw(fb.movie_id)
-        if not m:
-            continue
-        for g in (m.genres or "").split(","):
-            name = g.strip()
-            if name:
-                counts[name] += 1
-    data = [{"name": k, "value": v} for k, v in sorted(counts.items(), key=lambda x: -x[1])]
-    return AppResponse(
-        status="success",
-        message="User genre distribution",
-        data=data
-    )
-
 
 @user_feedback_router.get("/{movie_id}", response_model=AppResponse)
 async def get_my_feedback_for_movie(

@@ -106,35 +106,41 @@ class MovieHandler(CRUDManager[Movie, MovieCreate, MovieUpdate, MovieResponse]):
         self,
         page: int,
         limit: int,
-        search: Optional[str],
+        title: Optional[str],
         genre: Optional[str],
         language: Optional[str],
         release_year: Optional[int],
         sort_by: str,
         order: str,
+        search_bar: bool = False,
     ):
         query = self._db.query(Movie)
 
         # ----- Search -----
-        if search:
-            pattern = f"%{search}%"
+        if title:
+            # When title is provided, ignore all other filters
+            pattern = f"%{title}%" if search_bar else f"{title}"
             query = query.filter(
-                Movie.title.ilike(pattern) |
-                Movie.overview.ilike(pattern)
+                Movie.title.ilike(pattern)
             )
 
-        # ----- Genre Filter -----
-        if genre:
-            genres_list = [g.strip() for g in genre.split(",")]
-            for g in genres_list:
-                query = query.filter(Movie.genres.ilike(f"%{g}%"))
+        else:
+            # ----- Genre Filter -----
+            if genre:
+                genres_list = [g.strip() for g in genre.split(",")]
+                # Use OR logic for genres (match ANY of the selected genres)
+                query = query.filter(
+                    or_(*[Movie.genres.ilike(f"%{g}%") for g in genres_list])
+                )
 
-        # ----- Other Filters -----
-        if language:
-            query = query.filter(Movie.original_language == language)
+            # ----- Other Filters -----
+            if language:
+                # Language comes as comma-separated string, split it
+                languages_list = [l.strip() for l in language.split(",")]
+                query = query.filter(Movie.original_language.in_(languages_list))
 
-        if release_year:
-            query = query.filter(Movie.release_year == release_year)
+            if release_year:
+                query = query.filter(Movie.release_year == release_year)
 
         # ----- Sorting -----
         sort_map = {

@@ -1,5 +1,5 @@
 import axios, { AxiosError, AxiosHeaders, AxiosRequestConfig } from "axios";
-import { getAccessToken, getRefreshToken, refreshAccessToken, clearTokens, setTokens } from "@/lib/TokenManager";
+import { getAccessToken, getRefreshToken, refreshAccessToken, clearTokens, setTokens } from "@/lib/tokenManager";
 import { useAuthStore } from "@/stores/authStore";
 import { toast } from "sonner";
 
@@ -185,7 +185,7 @@ export const authAPI = {
     const response = await api.delete(`/users/${id}`);
     return response;
   },
-  
+
 };
 
 /* -----------------------------------------------------------
@@ -193,35 +193,41 @@ export const authAPI = {
 ----------------------------------------------------------- */
 export const moviesAPI = {
   search: async (params: {
-    search?: string;
+    title?: string;
     genre?: string[];
-    language?: string;
+    language?: string[];
     release_year?: number;
     sort_by?: string;
     order?: string;
     page?: number;
     limit?: number;
+    search_bar?: boolean;
   }) => {
     const sp = new URLSearchParams();
-  
-    if (params.search) sp.append("search", params.search);
-    if (params.language) sp.append("language", params.language);
+
+    if (params.title) sp.append("title", params.title);
     if (params.release_year) sp.append("release_year", params.release_year.toString());
     if (params.sort_by) sp.append("sort_by", params.sort_by);
     if (params.order) sp.append("order", params.order);
-  
+    if (params.search_bar !== undefined) sp.append("search_bar", params.search_bar.toString());
+
     // Genre → comma-separated list
     if (params.genre?.length) {
       sp.append("genre", params.genre.join(","));
     }
-  
+
+    // Language → comma-separated list
+    if (params.language?.length) {
+      sp.append("language", params.language.join(","));
+    }
+
     sp.append("page", params.page?.toString() || "1");
     sp.append("limit", params.limit?.toString() || "50");
-  
+
     const response = await api.get(`/movies/explore?${sp.toString()}`);
     return response.data;
   },
-  
+
 
   getById: async (tmdbId: number) => {
     const response = await api.get(`/movies/tmdb/${tmdbId}`);
@@ -237,22 +243,22 @@ export const moviesAPI = {
     const payload: any = {
       movie_id: id,
     };
-  
+
     // only include fields if they are valid
     if (typeof rating === "number" && rating > 0) {
       payload.rating = rating;
     }
-  
+
     if (typeof review === "string" && review.trim().length > 0) {
       payload.review = review.trim();
     }
-  
+
     if (status === "watchlist" || status === "watched") {
       payload.status = status;
       payload.rating = rating;
       payload.review = review;
     }
-  
+
     const response = await api.post("/feedbacks/", payload);
     return response.data;
   },
@@ -292,7 +298,6 @@ export const recommendationsAPI = {
 };
 
 export const userAPI = {
-  genreDistribution: () => api.get("/feedbacks/genre-distribution"),
   stats: () => api.get("/feedbacks/stats"),
 };
 

@@ -2,59 +2,36 @@ import { useState, useEffect } from "react";
 import Navbar from "@/components/Navbar";
 import Footer from "@/components/Footer";
 import DashboardMovieCard from "@/components/DashboardMovieCard";
-import SearchBar from "@/components/SearchBar";
-import GenrePie from "@/components/GenrePie";
-
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Carousel, CarouselContent, CarouselItem, CarouselNext, CarouselPrevious } from "@/components/ui/carousel";
-
-import { Film, Sparkles, TrendingUp, Calendar, Globe } from "lucide-react";
-
+import { Sparkles } from "lucide-react";
 import { recommendationsAPI, userAPI } from "@/lib/api";
 import { toast } from "sonner";
 import Autoplay from "embla-carousel-autoplay";
 import MovieModal from "@/components/MovieModal";
-
+import MoreLikeThisModal from "@/components/MoreLikeThisModal";
 import type { MovieDB } from "@/types";
 
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
 
+import { useStatsStore } from "@/stores/statsStore";
+
 export default function Dashboard() {
-  const [stats, setStats] = useState<any>(null);
+  const { stats, fetchStats } = useStatsStore();
   const [personalized, setPersonalized] = useState<MovieDB[]>([]);
   const [recentActivityRecs, setRecentActivityRecs] = useState<MovieDB[]>([]);
-  const [genreDist, setGenreDist] = useState<any[]>([]);
-  const [queryResults, setQueryResults] = useState<MovieDB[]>([]);
-  const [queryLoading, setQueryLoading] = useState(false);
 
   const [selectedTmdbId, setSelectedTmdbId] = useState<number | null>(null);
+
+  // More Like This Modal State
+  const [moreLikeThisOpen, setMoreLikeThisOpen] = useState(false);
+  const [moreLikeThisMovie, setMoreLikeThisMovie] = useState<{ id: number; title: string } | null>(null);
 
   // ------------------------------------
   // Fetch Stats
   // ------------------------------------
   useEffect(() => {
-    const fetchStats = async () => {
-      try {
-        const res = await userAPI.stats();
-        if (res.data?.status === "success") setStats(res.data.data);
-      } catch (err) {
-        toast.error("Failed to load stats.");
-      }
-    };
     fetchStats();
-  }, []);
-
-  // ------------------------------------
-  // Genre Distribution
-  // ------------------------------------
-  useEffect(() => {
-    const fetchGenres = async () => {
-      try {
-        const res = await userAPI.genreDistribution();
-        if (res.data?.status === "success") setGenreDist(res.data.data);
-      } catch {}
-    };
-    fetchGenres();
   }, []);
 
   // ------------------------------------
@@ -72,7 +49,7 @@ export default function Dashboard() {
               title: m.title,
               overview: m.overview ?? "",
               genres: Array.isArray(m.genres) ? m.genres.join(", ") : m.genres ?? "",
-              poster_url: m.poster_path ? `${TMDB_IMAGE_BASE}${m.poster_path}` : "/placeholder.svg",
+              poster_url: m.poster_path ? `${TMDB_IMAGE_BASE}${m.poster_path}` : "/poster-not-found.png",
               release_year: m.release_year ? `${m.release_year}` : "",
               popularity: m.popularity
             }))
@@ -101,44 +78,21 @@ export default function Dashboard() {
               title: m.title,
               overview: m.overview ?? "",
               genres: Array.isArray(m.genres) ? m.genres.join(", ") : m.genres ?? "",
-              poster_url: m.poster_path ? `${TMDB_IMAGE_BASE}${m.poster_path}` : "/placeholder.svg",
+              poster_url: m.poster_path ? `${TMDB_IMAGE_BASE}${m.poster_path}` : "/poster-not-found.png",
               release_year: m.release_year ? `${m.release_year}` : "",
               popularity: m.popularity
             }))
           );
         }
-      } catch {}
+      } catch { }
     };
 
     fetchRecent();
   }, []);
 
-  // ------------------------------------
-  // Dashboard Search Handler
-  // ------------------------------------
-  const handleSearch = async (q: string) => {
-    setQueryLoading(true);
-    try {
-      const res = await recommendationsAPI.search(q, 20);
-      if (res.data?.status === "success") {
-        setQueryResults(
-          res.data.data.map((m: any) => ({
-            id: m.id,
-            tmdbId: m.tmdb_id,
-            title: m.title,
-            overview: m.overview ?? "",
-            genres: Array.isArray(m.genres) ? m.genres.join(", ") : m.genres ?? "",
-            poster_url: m.poster_path ? `${TMDB_IMAGE_BASE}${m.poster_path}` : "/placeholder.svg",
-            release_year: m.release_year ? `${m.release_year}` : "",
-            popularity: m.popularity
-          }))
-        );
-      }
-    } catch {
-      setQueryResults([]);
-    } finally {
-      setQueryLoading(false);
-    }
+  const handleMoreLikeThis = (movie: MovieDB) => {
+    setMoreLikeThisMovie({ id: movie.tmdbId, title: movie.title });
+    setMoreLikeThisOpen(true);
   };
 
   return (
@@ -147,51 +101,6 @@ export default function Dashboard() {
 
       <main className="pt-20 pb-12">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
-
-
-          {/* -----------------------------------------------------
-               Search Bar + Query Results
-          ------------------------------------------------------ */}
-          <SearchBar onSearch={handleSearch} />
-
-          {queryLoading && (
-            <p className="text-muted-foreground text-sm">Searching...</p>
-          )}
-
-          {queryResults.length > 0 && (
-            <section className="mb-10">
-              <h2 className="text-2xl font-heading font-bold mb-4">
-                Results for your search
-              </h2>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
-                {queryResults.map((m) => (
-                  <DashboardMovieCard
-                    key={m.id}
-                    movie={m}
-                    onClick={() => setSelectedTmdbId(m.tmdbId)}
-                    onMoreLikeThis={async () => {
-                      const res = await recommendationsAPI.guest({ examples: [m.tmdbId] });
-                      toast("Showing movies similar to " + m.title);
-                      setQueryResults(
-                        (res.data.data || []).map((mv: any) => ({
-                          id: mv.id,
-                          tmdbId: mv.tmdb_id,
-                          title: mv.title,
-                          overview: mv.overview ?? "",
-                          genres: Array.isArray(mv.genres) ? mv.genres.join(", ") : mv.genres ?? "",
-                          poster_url: mv.poster_path ? `${TMDB_IMAGE_BASE}${mv.poster_path}` : "/placeholder.svg",
-                          release_year: mv.release_year ? `${mv.release_year}` : "",
-                          popularity: mv.popularity
-                        }))
-                      );
-                    }}
-                  />
-                ))}
-              </div>
-            </section>
-          )}
-
 
           {/* -----------------------------------------------------
                User Stats
@@ -236,20 +145,7 @@ export default function Dashboard() {
 
 
           {/* -----------------------------------------------------
-               Genre Distribution
-          ------------------------------------------------------ */}
-          <Card className="mb-12">
-            <CardHeader>
-              <CardTitle className="text-sm font-medium">Genre Distribution</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <GenrePie data={genreDist} />
-            </CardContent>
-          </Card>
-
-
-          {/* -----------------------------------------------------
-               Personalized Recs
+               Personalized Recs (Movies For You)
           ------------------------------------------------------ */}
           {personalized.length > 0 && (
             <section className="mb-12">
@@ -260,7 +156,7 @@ export default function Dashboard() {
 
               <Carousel
                 opts={{ align: "start", loop: true }}
-                plugins={[Autoplay({ delay: 3500, stopOnInteraction: false })]}
+                plugins={[Autoplay({ delay: 3500, stopOnInteraction: false, stopOnMouseEnter: true })]}
                 className="w-full"
               >
                 <CarouselContent>
@@ -269,22 +165,7 @@ export default function Dashboard() {
                       <DashboardMovieCard
                         movie={m}
                         onClick={() => setSelectedTmdbId(m.tmdbId)}
-                        onMoreLikeThis={async () => {
-                          const res = await recommendationsAPI.guest({ examples: [m.tmdbId] });
-                          toast("More like " + m.title);
-                          setQueryResults(
-                            (res.data.data || []).map((mv: any) => ({
-                              id: mv.id,
-                              tmdbId: mv.tmdb_id,
-                              title: mv.title,
-                              overview: mv.overview ?? "",
-                              genres: Array.isArray(mv.genres) ? mv.genres.join(", ") : mv.genres ?? "",
-                              poster_url: mv.poster_path ? `${TMDB_IMAGE_BASE}${mv.poster_path}` : "/placeholder.svg",
-                              release_year: mv.release_year ? `${mv.release_year}` : "",
-                              popularity: mv.popularity
-                            }))
-                          );
-                        }}
+                        onMoreLikeThis={() => handleMoreLikeThis(m)}
                       />
                     </CarouselItem>
                   ))}
@@ -308,7 +189,7 @@ export default function Dashboard() {
 
               <Carousel
                 opts={{ align: "start", loop: true }}
-                plugins={[Autoplay({ delay: 3500, stopOnInteraction: false })]}
+                plugins={[Autoplay({ delay: 3500, stopOnInteraction: false, stopOnMouseEnter: true })]}
                 className="w-full"
               >
                 <CarouselContent>
@@ -317,22 +198,7 @@ export default function Dashboard() {
                       <DashboardMovieCard
                         movie={m}
                         onClick={() => setSelectedTmdbId(m.tmdbId)}
-                        onMoreLikeThis={async () => {
-                          const res = await recommendationsAPI.guest({ examples: [m.tmdbId] });
-                          toast("More like " + m.title);
-                          setQueryResults(
-                            (res.data.data || []).map((mv: any) => ({
-                              id: mv.id,
-                              tmdbId: mv.tmdb_id,
-                              title: mv.title,
-                              overview: mv.overview ?? "",
-                              genres: Array.isArray(mv.genres) ? mv.genres.join(", ") : mv.genres ?? "",
-                              poster_url: mv.poster_path ? `${TMDB_IMAGE_BASE}${mv.poster_path}` : "/placeholder.svg",
-                              release_year: mv.release_year ? `${mv.release_year}` : "",
-                              popularity: mv.popularity
-                            }))
-                          );
-                        }}
+                        onMoreLikeThis={() => handleMoreLikeThis(m)}
                       />
                     </CarouselItem>
                   ))}
@@ -350,8 +216,19 @@ export default function Dashboard() {
 
       {/* Movie Modal */}
       {selectedTmdbId && (
-        <MovieModal tmdbId={selectedTmdbId} onClose={() => setSelectedTmdbId(null)} />
+        <MovieModal
+          tmdbId={selectedTmdbId}
+          onClose={() => setSelectedTmdbId(null)}
+        />
       )}
+
+      {/* More Like This Modal */}
+      <MoreLikeThisModal
+        open={moreLikeThisOpen}
+        onOpenChange={setMoreLikeThisOpen}
+        tmdbId={moreLikeThisMovie?.id ?? null}
+        movieTitle={moreLikeThisMovie?.title ?? ""}
+      />
     </div>
   );
 }
