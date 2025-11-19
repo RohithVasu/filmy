@@ -102,7 +102,7 @@ export default function DiscoverContent() {
     }, []);
 
     const handleMoreLikeThis = (movie: MovieDB) => {
-        setMoreLikeThisMovie({ id: movie.tmdbId, title: movie.title });
+        setMoreLikeThisMovie({ id: movie.id, title: movie.title });
         setMoreLikeThisOpen(true);
     };
 
@@ -288,7 +288,7 @@ export default function DiscoverContent() {
                     open={moreLikeThisOpen}
                     onOpenChange={setMoreLikeThisOpen}
                     movieTitle={moreLikeThisMovie.title}
-                    tmdbId={moreLikeThisMovie.id}
+                    id={moreLikeThisMovie.id}
                 />
             )}
         </div>

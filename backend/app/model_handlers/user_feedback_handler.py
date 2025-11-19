@@ -117,7 +117,7 @@ class UserFeedbackHandler(CRUDManager[UserFeedback, UserFeedbackCreate, UserFeed
         languages = set()
 
         for fb in feedbacks:
-            movie = movie_handler.get_by_id_raw(fb.movie_id)  # we'll add get_by_id_raw
+            movie = movie_handler.get_by_id(fb.movie_id)
 
             if movie and movie.original_language:
                 languages.add(movie.original_language)

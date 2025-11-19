@@ -295,6 +295,7 @@ export const recommendationsAPI = {
   personalized: (limit = 10) => api.get("/recommendations/personalized", { params: { limit } }),
   recent: (limit = 12) => api.get("/recommendations/recent", { params: { limit } }),
   search: (query: string, limit = 20) => api.get("/recommendations/search", { params: { query, limit } }),
+  similarMovies: (id: number, limit = 10) => api.get("/recommendations/similar-movies", { params: { id, limit } }),
 };
 
 export const userAPI = {

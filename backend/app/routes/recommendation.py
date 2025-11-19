@@ -67,3 +67,17 @@ def search_recommendations(
         message=f"Search results for '{query}'",
         data=movies
     )
+
+@recommendation_router.get("/similar-movies", response_model=AppResponse)
+def similar_movies(
+    id: int = Query(..., description="Movie ID to find similar movies for"),
+    limit: int = Query(10, description="Number of similar movies to return"),
+    db: Session = Depends(get_global_db_session),
+):
+    service = RecommendationService(db)
+    movies = service.similar_movies(movie_id=id, limit=limit)
+    return AppResponse(
+        status="success",
+        message=f"Similar movies for ID {id}",
+        data=movies
+    )

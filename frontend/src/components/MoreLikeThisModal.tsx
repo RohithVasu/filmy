@@ -10,14 +10,14 @@ import MovieModal from "@/components/MovieModal";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
 
 interface MoreLikeThisModalProps {
-    tmdbId: number | null;
+    id: number | null;
     movieTitle: string;
     open: boolean;
     onOpenChange: (open: boolean) => void;
 }
 
 export default function MoreLikeThisModal({
-    tmdbId,
+    id,
     movieTitle,
     open,
     onOpenChange,
@@ -27,11 +27,11 @@ export default function MoreLikeThisModal({
     const [selectedMovieId, setSelectedMovieId] = useState<number | null>(null);
 
     useEffect(() => {
-        if (open && tmdbId) {
+        if (open && id) {
             const fetchSimilar = async () => {
                 setLoading(true);
                 try {
-                    const res = await recommendationsAPI.guest({ examples: [tmdbId] });
+                    const res = await recommendationsAPI.similarMovies(id, 12);
                     if (res.data?.status === "success") {
                         setMovies(
                             (res.data.data || []).map((mv: any) => ({
@@ -56,7 +56,7 @@ export default function MoreLikeThisModal({
         } else {
             setMovies([]);
         }
-    }, [open, tmdbId]);
+    }, [open, id]);
 
     return (
         <>

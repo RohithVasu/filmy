@@ -62,10 +62,10 @@ class RecommendationService:
             vec = self.qdrant.embedding_model.encode(query, normalize_embeddings=True)
             qres = self.qdrant.search_similar(movie_vector=vec, top=limit * 2)
             ids = [r["id"] for r in qres]
-            movies = [self.movie_handler.get_by_id_raw(i) for i in ids]
+            movies = [self.movie_handler.get_by_id(i) for i in ids]
             # keep order and remove Nones
             ordered = [m for m in (movies) if m]
-            return [self.movie_handler._response_schema.model_validate(m) for m in ordered][:limit]
+            return ordered[:limit]
 
         if genres:
             return self.movie_handler.get_by_genres(genres, limit=limit)
@@ -204,3 +204,40 @@ class RecommendationService:
             watched = {fb.movie_id for fb in self.feedback_handler.get_user_feedbacks(user_id)}
             movies = [m for m in movies if m and m.id not in watched]
         return [self.movie_handler._response_schema.model_validate(m) for m in movies][:limit]
+
+    # -------------------------
+    # Similar movies based on movie ID
+    # -------------------------
+    def similar_movies(self, movie_id: int, limit: int = 10):
+        """
+        Find similar movies based on a given movie ID.
+        
+        Args:
+            movie_id: The TMDB ID of the movie to find similar movies for
+            limit: Maximum number of similar movies to return
+            
+        Returns:
+            List of similar movies, excluding the input movie
+        """
+        # Get the movie by ID
+        movie = self.movie_handler.get_by_id(movie_id)
+        if not movie:
+            return []
+        
+        # Create a text representation of the movie for embedding
+        movie_text = f"{movie.title}. {movie.overview or ''}. Genres: {movie.genres or ''}. Runtime: {movie.runtime or ''}"
+        
+        # Create vector from the movie text
+        vec = self.qdrant.embedding_model.encode(movie_text, normalize_embeddings=True)
+        
+        # Search for similar movies (get extra to account for filtering)
+        qres = self.qdrant.search_similar(movie_vector=vec, top=limit + 10)
+        
+        # Filter out the input movie and get movie objects
+        candidate_ids = [int(r["id"]) for r in qres if int(r["id"]) != movie_id]
+        movies = [self.movie_handler.get_by_id(id) for id in candidate_ids]
+        
+        # Remove None values and convert to response schema
+        valid_movies = [m for m in (movies) if m]
+        
+        return valid_movies[:limit]

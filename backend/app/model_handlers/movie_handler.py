@@ -74,7 +74,8 @@ class MovieHandler(CRUDManager[Movie, MovieCreate, MovieUpdate, MovieResponse]):
     def get_by_title(self, title: str) -> Optional[MovieResponse]:
         """Retrieve a movie by title."""
         try:
-            movie = self._db.query(Movie).filter(Movie.title.ilike(f"%{title}%")).first()
+            # movie = self._db.query(Movie).filter(Movie.title.ilike(f"{title}%")).first()
+            movie = self._db.query(Movie).filter(Movie.title.ilike(title)).first()
             return MovieResponse.model_validate(movie) if movie else None
         except NoResultFound:
             return None
@@ -82,6 +83,11 @@ class MovieHandler(CRUDManager[Movie, MovieCreate, MovieUpdate, MovieResponse]):
     def get_by_tmdb_id(self, tmdb_id: int) -> Optional[MovieResponse]:
         """Retrieve a movie by TMDB ID."""
         movie = self._db.query(Movie).filter(Movie.tmdb_id == tmdb_id).first()
+        return MovieResponse.model_validate(movie) if movie else None
+
+    def get_by_id(self, id: int) -> Optional[MovieResponse]:
+        """Return SQLAlchemy movie model object."""
+        movie = self._db.query(Movie).filter(Movie.id == id).first()
         return MovieResponse.model_validate(movie) if movie else None
 
     def get_by_genres(self, genres: List[str], limit: int = 10) -> List[MovieResponse]:
@@ -96,10 +102,6 @@ class MovieHandler(CRUDManager[Movie, MovieCreate, MovieUpdate, MovieResponse]):
                 .limit(limit)
             )
         return [MovieResponse.model_validate(m) for m in movies]
-
-    def get_by_id_raw(self, id: int):
-        """Return SQLAlchemy movie model object."""
-        return self._db.query(Movie).filter(Movie.id == id).first()
 
 
     def query_movies_paginated(
