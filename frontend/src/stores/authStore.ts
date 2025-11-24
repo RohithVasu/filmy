@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { User } from "@/types";
 import api, { authAPI } from "@/lib/api";
-import { getAccessToken, clearTokens } from "@/lib/TokenManager";
+import { getAccessToken, clearTokens } from "@/lib/tokenManager";
 
 interface AuthState {
   user: User | null;
@@ -44,7 +44,7 @@ export const useAuthStore = create<AuthState>()(
       logout: () => {
         try {
           clearTokens();
-        } catch {}
+        } catch { }
         set({
           user: null,
           isAuthenticated: false,
@@ -68,6 +68,7 @@ export const useAuthStore = create<AuthState>()(
             email: data.email,
             first_name: data.firstname,
             last_name: data.lastname,
+            genre_preferences: data.genre_preferences,
           };
 
           set({

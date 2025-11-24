@@ -42,6 +42,26 @@ async def create_or_update_movie(
         data=created,
     )
 
+# -----------------------------------
+# 🎬 Get Movies
+# -----------------------------------
+@movie_router.get("/", response_model=AppResponse)
+async def get_movies(
+    db: Session = Depends(get_global_db_session),
+    limit: int = Query(50, le=500000),
+):
+    handler = MovieHandler(db)
+
+    movies = handler.list_all(
+        limit=limit,
+    )
+
+    return AppResponse(
+        status="success",
+        message="Movies retrieved successfully",
+        data=movies,
+    )
+
 
 # -----------------------------------
 # 🎬 Get Movie by TMDB ID (Public)
@@ -73,12 +93,12 @@ async def explore_movies(
     page: int = Query(1, ge=1),
     limit: int = Query(50, le=100),
     title: Optional[str] = None,
-    genre: Optional[str] = None,       # comma-separated
+    genre: Optional[str] = None,
     language: Optional[str] = None,
     release_year: Optional[int] = None,
-    sort_by: Optional[str] = "popularity",  # popularity | title | release_year
-    order: Optional[str] = "desc",          # asc | desc
-    search_bar: bool = Query(False),              # if True, use %{title}% pattern
+    sort_by: Optional[str] = "popularity",
+    order: Optional[str] = "desc", 
+    search_bar: bool = Query(False),
 ):
     handler = MovieHandler(db)
 

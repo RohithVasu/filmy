@@ -15,6 +15,7 @@ import type { MovieDB } from "@/types";
 const TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500";
 
 import { useStatsStore } from "@/stores/statsStore";
+import { useAuthStore } from "@/stores/authStore";
 
 export default function Dashboard() {
   const { stats, fetchStats } = useStatsStore();
@@ -37,8 +38,16 @@ export default function Dashboard() {
   // ------------------------------------
   // Personalized
   // ------------------------------------
+  // ------------------------------------
+  // Personalized
+  // ------------------------------------
+  const { user } = useAuthStore();
+
   useEffect(() => {
     const fetchPersonalized = async () => {
+      // Only fetch if user has preferences
+      if (!user?.genre_preferences) return;
+
       try {
         const res = await recommendationsAPI.personalized(10);
         if (res.data?.status === "success") {
@@ -61,7 +70,7 @@ export default function Dashboard() {
     };
 
     fetchPersonalized();
-  }, []);
+  }, [user?.genre_preferences]);
 
   // ------------------------------------
   // Recent Activity Recs
@@ -96,10 +105,13 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
-      <Navbar />
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Background Glow - matching hero section */}
+      <div className="absolute inset-0 bg-gradient-to-b from-background via-primary/5 to-background" />
+      <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] rounded-full bg-primary/10 blur-3xl animate-glow-pulse" />
 
-      <main className="pt-20 pb-12">
+      <Navbar />
+      <main className="pt-20 pb-12 relative z-10">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8">
 
           {/* -----------------------------------------------------

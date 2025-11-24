@@ -16,6 +16,7 @@ import NotFound from "./pages/NotFound";
 
 import RegisterPromptModal from "@/components/auth/RegisterPromptModal";
 import SessionExpiredModal from "@/components/auth/SessionExpiredModal";
+import GenreSelectionModal from "@/components/auth/GenreSelectionModal";
 
 const queryClient = new QueryClient();
 
@@ -58,6 +59,7 @@ const App = () => (
         {/* Global modals */}
         <RegisterPromptModal />
         <SessionExpiredModal />
+        <GenreSelectionModal />
 
         <Routes>
           <Route path="/" element={<RootRoute />} />

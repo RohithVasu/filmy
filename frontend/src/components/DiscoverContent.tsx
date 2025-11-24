@@ -42,33 +42,40 @@ export default function DiscoverContent() {
     const [moreLikeThisOpen, setMoreLikeThisOpen] = useState(false);
     const [moreLikeThisMovie, setMoreLikeThisMovie] = useState<{ id: number; title: string } | null>(null);
 
+    const [hasSearched, setHasSearched] = useState(false);
+
     // Fetch Recommendations
     const fetchRecommendations = async () => {
         setLoading(true);
+        setHasSearched(true);
         try {
-            const params: any = { limit: 20 };
+            const params = new URLSearchParams();
+            params.append("limit", "20");
 
             if (viewMode === "similar") {
                 if (similarTo.trim()) {
-                    params.examples = [similarTo];
+                    params.append("query_movies", similarTo);
                 } else {
-                    // If "By Similar" is selected but empty, maybe show popular or prompt?
-                    // For now, let's just fetch popular if empty, or maybe we should require input?
-                    // Let's allow empty to show popular as fallback.
+                    toast.error("Please enter a movie title");
+                    setLoading(false);
+                    return;
                 }
             } else {
                 // Filter Mode
                 if (selectedGenres.length > 0) {
-                    params.genres = selectedGenres;
+                    selectedGenres.forEach(g => params.append("genres", g));
                 }
-                params.year_min = yearRange[0];
-                params.year_max = yearRange[1];
+                if (selectedLanguages.length > 0) {
+                    selectedLanguages.forEach(l => params.append("languages", l));
+                }
+                params.append("year_min", yearRange[0].toString());
+                params.append("year_max", yearRange[1].toString());
             }
 
-            const res = await recommendationsAPI.guest(params);
+            const res = await recommendationsAPI.recommend(params);
 
             if (res.data?.status === "success") {
-                let results = res.data.data.map((m: any) => ({
+                const results = res.data.data.map((m: any) => ({
                     id: m.id,
                     tmdbId: m.tmdb_id,
                     title: m.title,
@@ -82,11 +89,6 @@ export default function DiscoverContent() {
                     original_language: m.original_language
                 }));
 
-                // Client-side language filter (only applies in Filter mode)
-                if (viewMode === "filter" && selectedLanguages.length > 0) {
-                    results = results.filter((m: any) => selectedLanguages.includes(m.original_language));
-                }
-
                 setMovies(results);
             }
         } catch (err) {
@@ -95,11 +97,6 @@ export default function DiscoverContent() {
             setLoading(false);
         }
     };
-
-    // Initial fetch
-    useEffect(() => {
-        fetchRecommendations();
-    }, []);
 
     const handleMoreLikeThis = (movie: MovieDB) => {
         setMoreLikeThisMovie({ id: movie.id, title: movie.title });
@@ -120,7 +117,7 @@ export default function DiscoverContent() {
             {/* Header */}
             <div className="flex flex-col md:flex-row items-start md:items-end justify-between gap-4">
                 <div>
-                    <h1 className="text-3xl font-heading font-bold mb-2 text-transparent bg-clip-text bg-gradient-to-r from-primary to-purple-400">
+                    <h1 className="text-3xl font-heading font-bold mb-2 gradient-text">
                         Discover Your Next Favorite
                     </h1>
                     <p className="text-gray-400">Get recommendations for your next favorite movie using our AI engine.</p>
@@ -133,7 +130,7 @@ export default function DiscoverContent() {
                         className={cn(
                             "px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2",
                             viewMode === "filter"
-                                ? "bg-primary text-white shadow-lg"
+                                ? "bg-primary text-primary-foreground shadow-lg"
                                 : "text-gray-400 hover:text-white hover:bg-white/5"
                         )}
                     >
@@ -145,7 +142,7 @@ export default function DiscoverContent() {
                         className={cn(
                             "px-4 py-2 rounded-md text-sm font-medium transition-all flex items-center gap-2",
                             viewMode === "similar"
-                                ? "bg-primary text-white shadow-lg"
+                                ? "bg-primary text-primary-foreground shadow-lg"
                                 : "text-gray-400 hover:text-white hover:bg-white/5"
                         )}
                     >
@@ -270,7 +267,11 @@ export default function DiscoverContent() {
             ) : (
                 !loading && (
                     <div className="text-center py-20 text-gray-500">
-                        <p>No movies found. Try adjusting your filters.</p>
+                        {hasSearched ? (
+                            <p>No movies found. Try adjusting your filters.</p>
+                        ) : (
+                            <p>Select filters or search for a movie to get recommendations.</p>
+                        )}
                     </div>
                 )
             )}

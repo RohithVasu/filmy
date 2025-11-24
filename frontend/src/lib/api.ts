@@ -18,7 +18,7 @@ api.interceptors.request.use((config) => {
       config.headers.set("Authorization", `Bearer ${token}`);
     } else {
       config.headers = {
-        ...(config.headers || {}),
+        ...(config.headers as any || {}),
         Authorization: `Bearer ${token}`,
       } as any;
     }
@@ -102,7 +102,7 @@ api.interceptors.response.use(
           originalRequest.headers.set("Authorization", `Bearer ${newToken}`);
         } else {
           originalRequest.headers = {
-            ...(originalRequest.headers || {}),
+            ...(originalRequest.headers as any || {}),
             Authorization: `Bearer ${newToken}`,
           };
         }
@@ -269,11 +269,6 @@ export const moviesAPI = {
     return response.data.data;
   },
 
-  // getUserStats: async () => {
-  //   const response = await api.get("/feedbacks/stats");
-  //   return response.data;
-  // },
-
   getPersonalizedRecommendations: async (params?: { limit?: number }) => {
     const searchParams = new URLSearchParams();
     if (params?.limit)
@@ -294,7 +289,7 @@ export const recommendationsAPI = {
   guest: (params: any) => api.get("/recommendations/guest", { params }),
   personalized: (limit = 10) => api.get("/recommendations/personalized", { params: { limit } }),
   recent: (limit = 12) => api.get("/recommendations/recent", { params: { limit } }),
-  search: (query: string, limit = 20) => api.get("/recommendations/search", { params: { query, limit } }),
+  recommend: (params: any) => api.get("/recommendations/recommend", { params }),
   similarMovies: (id: number, limit = 10) => api.get("/recommendations/similar-movies", { params: { id, limit } }),
 };
 

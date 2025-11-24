@@ -330,7 +330,8 @@ const MovieModal = ({ id: propId, tmdbId, onClose }: MovieModalProps) => {
   return (
     <Dialog open={true} onOpenChange={(open) => !open && onClose()}>
       <DialogContent
-        className="bg-zinc-900 text-white border-zinc-800 max-w-[95%] sm:max-w-[780px] max-h-[85vh] overflow-y-auto scrollbar-hide p-6"
+        className="text-white border-zinc-800 max-w-[95%] sm:max-w-[780px] max-h-[85vh] overflow-y-auto scrollbar-hide p-6"
+        style={{ background: "var(--gradient-hero)" }}
         onOpenAutoFocus={(e) => e.preventDefault()}
       >
         <DialogTitle className="sr-only">{movie?.title || "Movie Details"}</DialogTitle>
@@ -385,7 +386,7 @@ const MovieModal = ({ id: propId, tmdbId, onClose }: MovieModalProps) => {
                   className={`px-4 py-2 rounded-full flex items-center gap-2 border ${!isAuthenticated
                     ? "opacity-40 cursor-not-allowed border-gray-700 text-gray-400"
                     : status === "watchlist"
-                      ? "bg-yellow-400 text-black border-yellow-500"
+                      ? "bg-white text-black border-white"
                       : "border-gray-700 text-gray-300"
                     }`}
                 >

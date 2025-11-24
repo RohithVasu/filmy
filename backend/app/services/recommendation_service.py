@@ -6,43 +6,97 @@ import pickle
 
 from app.core.qdrant import get_qdrant_client
 from app.model_handlers.movie_handler import MovieHandler
+from app.model_handlers.user_handler import UserHandler
 from app.model_handlers.user_feedback_handler import UserFeedbackHandler
+from app.ml.loaders.model_loader import load_implicit_artifacts
 
-# LightFM imports (for when model exists)
-# try:
-#     from lightfm import LightFM
-# except Exception:
-LightFM = None
-
-MODEL_ARTIFACT_PATH = os.getenv("LIGHTFM_MODEL_PATH", "models/lightfm.pkl")
-DATASET_MAP_PATH = os.getenv("LIGHTFM_DATASET_MAP_PATH", "models/dataset_map.pkl")
+from loguru import logger
 
 class RecommendationService:
     def __init__(self, db: Session):
         self.db = db
         self.movie_handler = MovieHandler(db)
+        self.user_handler = UserHandler(db)
         self.feedback_handler = UserFeedbackHandler(db)
         self.qdrant = get_qdrant_client()
-        self.lightfm_model = None
-        self.dataset_map = None
-        self.item_features = None
-        self._load_lightfm()
 
-    def _load_lightfm(self):
-        if LightFM is None:
-            return
-        if os.path.exists(MODEL_ARTIFACT_PATH) and os.path.exists(DATASET_MAP_PATH):
-            with open(MODEL_ARTIFACT_PATH, "rb") as f:
-                self.lightfm_model = pickle.load(f)
-            with open(DATASET_MAP_PATH, "rb") as f:
-                self.dataset_map = pickle.load(f)
-        else:
-            self.lightfm_model = None
+        # implicit artifacts
+        self.implicit_model = None
+        self.dataset_map = None
+        self.item_factors = None
+        self.user_factors = None
+        self._load_implicit()
+
+    def _load_implicit(self):
+        try:
+            model, dataset_map, item_factors, user_factors = load_implicit_artifacts()
+            self.implicit_model = model
+            self.dataset_map = dataset_map
+            self.item_factors = item_factors
+            self.user_factors = user_factors
+            if model:
+                print("✅ Loaded implicit model and artifacts")
+        except Exception as e:
+            print("No implicit model available:", e)
+            self.implicit_model = None
             self.dataset_map = None
 
-    # -------------------------
-    # Guest: examples (movie titles or tmdb ids) -> DB fetch -> embed -> qdrant search -> DB results
-    # -------------------------
+    def _rerank_with_implicit(self, user_id: int, candidate_ids: List[int]):
+        user_map = self.dataset_map["user_map"]
+        item_map = self.dataset_map["item_map"]
+        inv_item_map = self.dataset_map["inv_item_map"]
+
+        # Can't rerank if user not in ALS model
+        if user_id not in user_map:
+            return candidate_ids
+
+        uidx = user_map[user_id]
+        user_vec = self.user_factors[uidx]
+
+        # keep only items known to ALS
+        filtered = [cid for cid in candidate_ids if cid in item_map]
+        if not filtered:
+            return candidate_ids
+
+        indices = [item_map[c] for c in filtered]
+        item_vecs = self.item_factors[indices]
+
+        scores = item_vecs.dot(user_vec)
+        order = np.argsort(-scores)
+        reranked = [filtered[i] for i in order]
+
+        return reranked
+
+
+    def recommend_for_cold_start(self, user_id: int, limit: int = 10):
+
+        user = self.user_handler.get_by_id(user_id)
+        if not user or not user.genre_preferences:
+            popular = self.movie_handler.list_all(skip=0, limit=limit*3)
+            return [self.movie_handler._response_schema.model_validate(m) for m in popular[:limit]]
+
+        genres = [g.strip() for g in user.genre_preferences.split(",") if g.strip()]
+
+        if not genres:
+            popular = self.movie_handler.list_all(skip=0, limit=limit*3)
+            return [self.movie_handler._response_schema.model_validate(m) for m in popular[:limit]]
+
+        query = f"Movies in genres: {', '.join(genres)}. Recommend good movies."
+
+        vec = self.qdrant.embedding_model.encode(query, normalize_embeddings=True)
+        results = self.qdrant.search_similar(movie_vector=vec, top=limit * 20)
+
+        filtered = []
+        for r in results:
+            movie = self.movie_handler.get_by_id(r["id"])
+            if movie and any(g.lower() in (movie.genres or "").lower() for g in genres):
+                filtered.append(movie)
+
+        filtered = sorted(filtered, key=lambda m: m.popularity or 0, reverse=True)
+
+        return [self.movie_handler._response_schema.model_validate(m) for m in filtered[:limit]]
+
+
     def guest_recommendations(
         self, 
         genres: Optional[List[str]] = None,
@@ -51,18 +105,27 @@ class RecommendationService:
     ):
         if examples:
             docs = []
+            movie_ids = []
             for ex in examples:
                 movie = self.movie_handler.get_by_title(ex)
                 if movie:
-                    movie_text = f"{movie.title}. {movie.overview or ''}. Genres: {movie.genres or ''}. Runtime: {movie.runtime or ''}"
+                    movie_ids.append(movie.id)
+                    movie_text = f"""
+                        Title: {movie.title}
+                        Overview: {movie.overview}
+                        Genres: {movie.genres}
+                        Tagline: {movie.tagline}
+                        Keywords: {movie.keywords}
+                        Language: {movie.original_language}
+                    """.strip()
                     docs.append(movie_text)
                 else:
                     docs.append(ex)
             query = " ".join(docs)
             vec = self.qdrant.embedding_model.encode(query, normalize_embeddings=True)
             qres = self.qdrant.search_similar(movie_vector=vec, top=limit * 2)
-            ids = [r["id"] for r in qres]
-            movies = [self.movie_handler.get_by_id(i) for i in ids]
+            candidate_ids = [int(r["id"]) for r in qres if int(r["id"]) not in movie_ids]
+            movies = [self.movie_handler.get_by_id(id) for id in candidate_ids]
             # keep order and remove Nones
             ordered = [m for m in (movies) if m]
             return ordered[:limit]
@@ -73,51 +136,74 @@ class RecommendationService:
         # fallback: popular
         return self.movie_handler.list_all(skip=0, limit=limit)
 
-    # -------------------------
-    # Personalized (LightFM ranking + fallback)
-    # -------------------------
-    def personalized_recommendations(self, user_id: int, limit: int = 10):
-        # If no model or dataset_map -> fallback to content-based popular
-        if not self.lightfm_model or not self.dataset_map:
-            # fallback: use Qdrant/popularity hybrid: get top popular in genres user likes
-            # For now return popular movies
-            return self.recommend_popular_for_user(user_id, limit)
 
-        # map user id -> model user index mapping (dataset_map should store user_map and item_map)
+    def personalized_recommendations(
+        self, 
+        user_id: int, 
+        limit: int = 10
+    ):
+        # Cold start: fallback to genre preferences / popular if no feedback
+        feedbacks = self.feedback_handler.get_user_feedbacks(user_id)
+        if not feedbacks:
+            return self.recommend_for_cold_start(user_id, limit)
+
+        if not self.implicit_model or not self.dataset_map:
+            return self.recommend_for_cold_start(user_id, limit)
+
         user_map = self.dataset_map.get("user_map", {})
         item_map = self.dataset_map.get("item_map", {})
-        inv_item_map = {v: k for k, v in item_map.items()}  # model-index -> movie id
+        inv_item_map = self.dataset_map.get("inv_item_map", {})
 
-        model_user_index = user_map.get(user_id)
-        if model_user_index is None:
-            return self.recommend_popular_for_user(user_id, limit)
+        if user_id not in user_map:
+            return self.recommend_for_cold_start(user_id, limit)
 
-        # prepare item list
-        all_item_indices = list(inv_item_map.keys())
-        item_ids = [inv_item_map[i] for i in all_item_indices]
+        model_user_index = user_map[user_id]
 
-        # predict
-        scores = self.lightfm_model.predict(model_user_index, np.array(all_item_indices))
-        top_idx = np.argsort(-scores)[:limit * 3]
-        candidate_item_indices = [all_item_indices[i] for i in top_idx]
-        candidate_ids = [inv_item_map[i] for i in candidate_item_indices]
+        # Candidate generation (use recent watched movies)
+        recent = feedbacks[-5:]
+        movie_ids = [f.movie_id for f in recent]
+        texts = []
+        for mid in movie_ids:
+            m = self.movie_handler.get_by_id(mid)
+            if m:
+                texts.append(f"{m.title}. {m.overview or ''}. Genres: {m.genres or ''}")
+        query = " ".join(texts) if texts else None
 
-        # filter watched
-        watched = {fb.movie_id for fb in self.feedback_handler.get_user_feedbacks(user_id)}
-        final = [mid for mid in candidate_ids if mid not in watched][:limit]
-        movies = [self.movie_handler.get_by_id_raw(mid) for mid in final]
+        if query:
+            vec = self.qdrant.embedding_model.encode(query, normalize_embeddings=True)
+            candidates = self.qdrant.search_similar(movie_vector=vec, top=limit * 20)
+            candidate_ids = [c["id"] for c in candidates if c["id"] in item_map]
+        else:
+            # fallback: top popular items from DB (but we still want to rerank)
+            candidate_rows = self.movie_handler.list_all(skip=0, limit=limit * 20)
+            candidate_ids = [m.id for m in candidate_rows if m.id in item_map]
+
+        if not candidate_ids:
+            return self.recommend_for_cold_start(user_id, limit)
+
+        candidate_item_indices = [item_map[cid] for cid in candidate_ids]
+
+        # Score using dot(user_vector, item_vectors)
+        if self.user_factors is not None:
+            user_vector = self.user_factors[model_user_index]
+        else:
+            # fall back to using implicit model's user_factors if present
+            user_vector = self.implicit_model.user_factors[model_user_index]
+
+        item_vectors = self.item_factors[candidate_item_indices]
+        scores = item_vectors.dot(user_vector)
+
+        ranked_idx = np.argsort(-scores)
+        ranked_candidate_ids = [candidate_ids[i] for i in ranked_idx]
+
+        # Filter watched
+        watched = {fb.movie_id for fb in feedbacks}
+        final_ids = [mid for mid in ranked_candidate_ids if mid not in watched][:limit]
+
+        movies = [self.movie_handler.get_by_id(mid) for mid in final_ids]
         return [self.movie_handler._response_schema.model_validate(m) for m in movies if m]
 
-    def recommend_popular_for_user(self, user_id: int, limit=10):
-        # simple fallback: highest popularity not watched
-        all_popular = self.db.query(self.movie_handler._model).order_by(self.movie_handler._model.popularity.desc()).limit(limit*3).all()
-        watched = {fb.movie_id for fb in self.feedback_handler.get_user_feedbacks(user_id)}
-        filtered = [m for m in all_popular if m.id not in watched][:limit]
-        return [self.movie_handler._response_schema.model_validate(m) for m in filtered]
 
-    # -------------------------
-    # Based on last N watched (single-section using last 3)
-    # -------------------------
     def recommendations_based_on_recent_activity(
         self,
         user_id: int,
@@ -136,11 +222,18 @@ class RecommendationService:
 
         candidate_scores = {}
         for fb in fb_q:
-            movie = self.movie_handler.get_by_id_raw(fb.movie_id)
+            movie = self.movie_handler.get_by_id(fb.movie_id)
             if not movie: 
                 continue
-            txt = f"{movie.title}. {movie.overview or ''}. Genres: {movie.genres or ''}. Runtime: {movie.runtime or ''}"
-            vec = self.qdrant.embedding_model.encode(txt, normalize_embeddings=True)
+            movie_text = f"""
+                    Title: {movie.title}
+                    Overview: {movie.overview}
+                    Genres: {movie.genres}
+                    Tagline: {movie.tagline}
+                    Keywords: {movie.keywords}
+                    Language: {movie.original_language}
+                """.strip()
+            vec = self.qdrant.embedding_model.encode(movie_text, normalize_embeddings=True)
             qres = self.qdrant.search_similar(movie_vector=vec, top=limit*2)
             for r in qres:
                 mid = int(r["id"])
@@ -150,82 +243,84 @@ class RecommendationService:
         watched = {fb.movie_id for fb in self.feedback_handler.get_user_feedbacks(user_id)}
         candidates = [(mid, score) for mid, score in candidate_scores.items() if mid not in watched]
         top = sorted(candidates, key=lambda x: -x[1])[:limit]
-        movies = [self.movie_handler.get_by_id_raw(mid) for mid, _ in top]
+        movies = [self.movie_handler.get_by_id(mid) for mid, _ in top]
         return [self.movie_handler._response_schema.model_validate(m) for m in movies if m]
 
-    # -------------------------
-    # Query-based search (dashboard search bar)
-    # -------------------------
+
     def search_recommendations(
-        self, 
-        query: str,
+        self,
+        user_id: Optional[int],
+        query_movies: Optional[List[str]],
+        genres: Optional[List[str]],
+        languages: Optional[List[str]],
+        year_min: Optional[int],
+        year_max: Optional[int],
         limit: int = 20,
-        user_id: Optional[int] = None
     ):
-        vec = self.qdrant.embedding_model.encode(query, normalize_embeddings=True)
-        qres = self.qdrant.search_similar(movie_vector=vec, top=limit * 2)
-        candidate_ids = [int(r["id"]) for r in qres]
+        # Build Qdrant filter
+        q_filters = {}
 
-        # if user present and model present -> hybrid rerank (simple: use lightfm scores when available)
-        if user_id and self.lightfm_model and self.dataset_map:
-            user_map = self.dataset_map.get("user_map", {})
-            inv_item_map = {v: k for k, v in self.dataset_map.get("item_map", {}).items()}
-            model_user_index = user_map.get(user_id)
-            scores_map = {}
-            if model_user_index is not None:
-                # compute for candidate item indices (if in model)
-                item_map = self.dataset_map.get("item_map", {})
-                for mid in candidate_ids:
-                    model_idx = item_map.get(mid)
-                    if model_idx is None:
-                        continue
-                    sc = float(self.lightfm_model.predict(model_user_index, np.array([model_idx]))[0])
-                    scores_map[mid] = sc
+        if genres:
+            q_filters["genres"] = genres
 
-            # merge qdrant score + model score
-            merged = []
-            for r in qres:
-                mid = int(r["id"])
-                qscore = float(r["score"])
-                mscore = scores_map.get(mid)
-                final = (0.6 * mscore + 0.4 * qscore) if mscore is not None else qscore
-                merged.append((mid, final))
-            merged_sorted = sorted(merged, key=lambda x: -x[1])[:limit]
-            movies = [self.movie_handler.get_by_id_raw(mid) for mid, _ in merged_sorted]
-            # filter watched if user
-            if user_id:
-                watched = {fb.movie_id for fb in self.feedback_handler.get_user_feedbacks(user_id)}
-                movies = [m for m in movies if m and m.id not in watched]
-            return [self.movie_handler._response_schema.model_validate(m) for m in movies if m][:limit]
+        if languages:
+            q_filters["original_language"] = languages
 
-        # else: just return qdrant order (exclude watched if user)
-        movies = [self.movie_handler.get_by_id_raw(mid) for mid in candidate_ids]
+        if year_min or year_max:
+            q_filters["release_year"] = {
+                "gte": year_min,
+                "lte": year_max
+            }
+
+        # Similarity Mode
+        if query_movies:
+            examples_res = self.guest_recommendations(examples=query_movies, limit=limit * 40)
+            raw_results = [{"id": m.id, "score": getattr(m, "popularity", 0)} for m in examples_res]
+
+        # Filter Mode
+        else:
+            query = "movies recommended to watch"
+            vector = self.qdrant.embedding_model.encode(query, normalize_embeddings=True)
+
+            raw_results = self.qdrant.search_similar(
+                movie_vector=vector,
+                top=limit * 40,
+                filters=q_filters
+            )
+
+        candidate_ids = [r["id"] for r in raw_results]
+
+        # Personalized re-ranking (ALS)
+        if user_id and self.implicit_model:
+            ranked_ids = self._rerank_with_implicit(user_id, candidate_ids)
+        else:
+            ranked_ids = candidate_ids
+
+        # Remove watched movies
         if user_id:
-            watched = {fb.movie_id for fb in self.feedback_handler.get_user_feedbacks(user_id)}
-            movies = [m for m in movies if m and m.id not in watched]
-        return [self.movie_handler._response_schema.model_validate(m) for m in movies][:limit]
+            watched = {f.movie_id for f in self.feedback_handler.get_user_feedbacks(user_id)}
+            ranked_ids = [mid for mid in ranked_ids if mid not in watched]
 
-    # -------------------------
-    # Similar movies based on movie ID
-    # -------------------------
-    def similar_movies(self, movie_id: int, limit: int = 10):
-        """
-        Find similar movies based on a given movie ID.
+        # Build final movie responses
+        movies = [self.movie_handler.get_by_id(mid) for mid in ranked_ids[:limit]]
+        return [self.movie_handler._response_schema.model_validate(m) for m in movies if m]
         
-        Args:
-            movie_id: The TMDB ID of the movie to find similar movies for
-            limit: Maximum number of similar movies to return
-            
-        Returns:
-            List of similar movies, excluding the input movie
-        """
+
+    def similar_movies(self, movie_id: int, limit: int = 10):
         # Get the movie by ID
         movie = self.movie_handler.get_by_id(movie_id)
         if not movie:
             return []
         
         # Create a text representation of the movie for embedding
-        movie_text = f"{movie.title}. {movie.overview or ''}. Genres: {movie.genres or ''}. Runtime: {movie.runtime or ''}"
+        movie_text = f"""
+                Title: {movie.title}
+                Overview: {movie.overview}
+                Genres: {movie.genres}
+                Tagline: {movie.tagline}
+                Keywords: {movie.keywords}
+                Language: {movie.original_language}
+            """.strip()
         
         # Create vector from the movie text
         vec = self.qdrant.embedding_model.encode(movie_text, normalize_embeddings=True)

@@ -46,7 +46,7 @@ async def create_or_update_feedback(
         movie_id=feedback_in.movie_id,
         rating=feedback_in.rating,
         review=feedback_in.review,
-        status=feedback_in.status
+        status=feedback_in.status,
     )
     created = feedback_handler.create(feedback)
 

@@ -52,19 +52,30 @@ def recent_activity_recommendations(
         data=movies
     )
 
-@recommendation_router.get("/search", response_model=AppResponse)
+@recommendation_router.get("/recommend", response_model=AppResponse)
 def search_recommendations(
-    query: str = Query(...),
-    limit: int = Query(20),
+    query_movies: Optional[List[str]] = Query(None),
+    genres: Optional[List[str]] = Query(None),
+    languages: Optional[List[str]] = Query(None),
+    year_min: Optional[int] = None,
+    year_max: Optional[int] = None,
+    limit: int = 20,
     db: Session = Depends(get_global_db_session),
     current_user: Optional[UserResponse] = Depends(get_current_user),
 ):
     service = RecommendationService(db)
-    user_id = current_user.id if current_user else None
-    movies = service.search_recommendations(query=query, limit=limit, user_id=user_id)
+    movies = service.search_recommendations(
+        user_id=current_user.id if current_user else None,
+        query_movies=query_movies,
+        genres=genres,
+        languages=languages,
+        year_min=year_min,
+        year_max=year_max,
+        limit=limit
+    )
     return AppResponse(
         status="success",
-        message=f"Search results for '{query}'",
+        message="Search recommendations",
         data=movies
     )
 

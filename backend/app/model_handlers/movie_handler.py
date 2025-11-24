@@ -16,6 +16,8 @@ class MovieCreate(BaseModel):
     overview: Optional[str] = None
     genres: Optional[str] = Field(default_factory="")
     original_language: Optional[str] = None
+    tagline: Optional[str] = None
+    keywords: Optional[str] = None
     runtime: Optional[int] = None
     popularity: Optional[float] = None
     poster_path: Optional[str] = None
@@ -28,6 +30,8 @@ class MovieUpdate(BaseModel):
     overview: Optional[str] = None
     genres: Optional[str] = Field(default_factory="")
     original_language: Optional[str] = None
+    tagline: Optional[str] = None
+    keywords: Optional[str] = None
     runtime: Optional[int] = None
     popularity: Optional[float] = None
     poster_path: Optional[str] = None
@@ -43,6 +47,8 @@ class MovieResponse(BaseModel):
     overview: Optional[str]
     genres: Optional[str]
     original_language: Optional[str]
+    tagline: Optional[str]
+    keywords: Optional[str]
     runtime: Optional[int]
     popularity: Optional[float]
     poster_path: Optional[str]
@@ -121,7 +127,7 @@ class MovieHandler(CRUDManager[Movie, MovieCreate, MovieUpdate, MovieResponse]):
         # ----- Search -----
         if title:
             # When title is provided, ignore all other filters
-            pattern = f"%{title}%" if search_bar else f"{title}"
+            pattern = f"%{title}%" if search_bar else f"{title}%"
             query = query.filter(
                 Movie.title.ilike(pattern)
             )

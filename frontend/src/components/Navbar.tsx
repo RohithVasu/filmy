@@ -96,7 +96,7 @@ const Navbar = () => {
                         </button>
                       </form>
                     ) : (
-                      <Button variant="ghost" size="icon" onClick={() => setSearchOpen(true)} className="hover:bg-transparent hover:text-purple-400">
+                      <Button variant="ghost" size="icon" onClick={() => setSearchOpen(true)} className="hover:bg-transparent hover:text-primary">
                         <Search className="w-5 h-5" />
                       </Button>
                     )}
@@ -106,8 +106,8 @@ const Navbar = () => {
                     <Button
                       variant="ghost"
                       className={cn(
-                        "hidden sm:inline-flex transition-all hover:bg-transparent hover:text-purple-400 hover:shadow-[0_0_10px_rgba(192,132,252,0.3)]",
-                        location.pathname === "/explore" && "text-purple-400 shadow-[0_0_15px_rgba(192,132,252,0.5)]"
+                        "hidden sm:inline-flex transition-all hover:bg-transparent hover:text-primary hover:shadow-[0_0_10px_rgba(217,217,217,0.2)]",
+                        location.pathname === "/explore" && "text-primary shadow-[0_0_15px_rgba(217,217,217,0.3)]"
                       )}
                     >
                       Explore
@@ -118,8 +118,8 @@ const Navbar = () => {
                     <Button
                       variant="ghost"
                       className={cn(
-                        "hidden sm:inline-flex transition-all hover:bg-transparent hover:text-purple-400 hover:shadow-[0_0_10px_rgba(192,132,252,0.3)]",
-                        location.pathname === "/recommendations" && "text-purple-400 shadow-[0_0_15px_rgba(192,132,252,0.5)]"
+                        "hidden sm:inline-flex transition-all hover:bg-transparent hover:text-primary hover:shadow-[0_0_10px_rgba(217,217,217,0.2)]",
+                        location.pathname === "/recommendations" && "text-primary shadow-[0_0_15px_rgba(217,217,217,0.3)]"
                       )}
                     >
                       Recommendations
@@ -130,8 +130,8 @@ const Navbar = () => {
                     <Button
                       variant="ghost"
                       className={cn(
-                        "hidden sm:inline-flex transition-all hover:bg-transparent hover:text-purple-400 hover:shadow-[0_0_10px_rgba(192,132,252,0.3)]",
-                        location.pathname === "/dashboard" && "text-purple-400 shadow-[0_0_15px_rgba(192,132,252,0.5)]"
+                        "hidden sm:inline-flex transition-all hover:bg-transparent hover:text-primary hover:shadow-[0_0_10px_rgba(217,217,217,0.2)]",
+                        location.pathname === "/dashboard" && "text-primary shadow-[0_0_15px_rgba(217,217,217,0.3)]"
                       )}
                     >
                       Dashboard
@@ -140,7 +140,7 @@ const Navbar = () => {
 
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" className="flex items-center gap-2 hover:bg-transparent hover:text-purple-400">
+                      <Button variant="ghost" className="flex items-center gap-2 hover:bg-transparent hover:text-primary">
                         <User className="w-4 h-4" />
                         <span className="hidden sm:inline">
                           {user?.first_name} {user?.last_name}
@@ -155,7 +155,7 @@ const Navbar = () => {
 
                       <DropdownMenuSeparator />
 
-                      <DropdownMenuItem onClick={() => setEditOpen(true)} className="hover:bg-purple-500/10 hover:text-purple-400 focus:bg-purple-500/10 focus:text-purple-400">
+                      <DropdownMenuItem onClick={() => setEditOpen(true)} className="hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary">
                         <Pencil className="w-4 h-4 mr-2" />
                         Edit Profile
                       </DropdownMenuItem>
@@ -167,7 +167,7 @@ const Navbar = () => {
 
                       <DropdownMenuSeparator />
 
-                      <DropdownMenuItem onClick={handleLogout} className="hover:bg-purple-500/10 hover:text-purple-400 focus:bg-purple-500/10 focus:text-purple-400">
+                      <DropdownMenuItem onClick={handleLogout} className="hover:bg-primary/10 hover:text-primary focus:bg-primary/10 focus:text-primary">
                         <LogOut className="w-4 h-4 mr-2" />
                         Logout
                       </DropdownMenuItem>
@@ -180,15 +180,15 @@ const Navbar = () => {
                     <Button
                       variant="ghost"
                       className={cn(
-                        "hidden sm:inline-flex transition-all hover:bg-transparent hover:text-purple-400 hover:shadow-[0_0_10px_rgba(192,132,252,0.3)]",
-                        location.pathname === "/explore" && "text-purple-400 shadow-[0_0_15px_rgba(192,132,252,0.5)]"
+                        "hidden sm:inline-flex transition-all hover:bg-transparent hover:text-primary hover:shadow-[0_0_10px_rgba(217,217,217,0.2)]",
+                        location.pathname === "/explore" && "text-primary shadow-[0_0_15px_rgba(217,217,217,0.3)]"
                       )}
                     >
                       Explore
                     </Button>
                   </Link>
                   <Link to="/login">
-                    <Button variant="ghost" className="hidden sm:inline-flex hover:bg-transparent hover:text-purple-400 hover:shadow-[0_0_10px_rgba(192,132,252,0.3)] transition-all">
+                    <Button variant="ghost" className="hidden sm:inline-flex hover:bg-transparent hover:text-primary hover:shadow-[0_0_10px_rgba(217,217,217,0.2)] transition-all">
                       Login
                     </Button>
                   </Link>
