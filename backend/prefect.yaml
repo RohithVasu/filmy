@@ -1,0 +1,16 @@
+version: 3.0
+
+deployments:
+  - name: filmy-ingest-daily
+    entrypoint: app/pipelines/prefect/ingest_flow.py:run_ingest
+    schedule:
+      cron: "0 4 * * *"
+      timezone: "Europe/Berlin"
+    pool: filmy-pool
+
+  - name: filmy-training-daily
+    entrypoint: app/pipelines/prefect/training_flow.py:run_train
+    schedule:
+      cron: "0 4 * * *"
+      timezone: "Europe/Berlin"
+    pool: filmy-pool

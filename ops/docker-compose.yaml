@@ -1,51 +1,41 @@
 services:
-  # backend:
-  #   build:
-  #     context: ../backend
-  #     dockerfile: ops/Dockerfile
-  #   image: askdocs/backend:latest
-  #   container_name: askdocs-backend
-  #   restart: always
-  #   ports:
-  #     - "8000:8000"
-  #   environment:
-  #     ENV_FOR_DYNACONF: production
-  #   env_file:
-  #     - ../backend/.env.prod
-  #   depends_on:
-  #     - postgres
-  #     - qdrant
-  #     - redis
-  #   networks:
-  #     - askdocs-network
-  #   volumes:
-  #     - ../backend/data/documents:/app/data/documents
+  backend:
+    build:
+      context: ../backend
+      dockerfile: ops/Dockerfile
+    container_name: filmy-backend
+    restart: always
+    ports:
+      - "8000:8000"
+    env_file:
+      - ../backend/.env.prod
+    depends_on:
+      - postgres
+      - qdrant
+    networks:
+      - filmy-network
 
-  # frontend:
-  #   build:
-  #     context: ../frontend
-  #     dockerfile: ops/Dockerfile
-  #   image: askdocs/frontend:latest
-  #   container_name: askdocs-frontend
-  #   ports:
-  #     - "8001:8001"
-  #   restart: always
-  #   env_file:
-  #     - ../frontend/.env
-  #   depends_on:
-  #     - backend
-  #   networks:
-  #     - askdocs-network
-
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: ops/Dockerfile
+    container_name: filmy-frontend
+    restart: always
+    ports:
+      - "8001:8001"
+    env_file:
+      - ../frontend/.env
+    depends_on:
+      - backend
+    networks:
+      - filmy-network
 
   postgres:
     image: postgres:17
     container_name: filmy-postgres
     restart: always
-    environment:
-      POSTGRES_DB: filmy_db
-      POSTGRES_USER: filmy
-      POSTGRES_PASSWORD: filmy
+    env_file:
+      - ../backend/.env.prod
     ports:
       - "5432:5432"
     volumes:
@@ -58,9 +48,8 @@ services:
     image: dpage/pgadmin4:latest
     container_name: filmy-pgadmin
     restart: always
-    environment:
-      PGADMIN_DEFAULT_EMAIL: admin@filmy.com
-      PGADMIN_DEFAULT_PASSWORD: Password@123
+    env_file:
+      - ../backend/.env.prod
     ports:
       - "5050:80"
     depends_on:
@@ -69,6 +58,42 @@ services:
       - filmy-network
     volumes:
       - pgadmin_data:/var/lib/pgadmin
+
+  minio:
+    image: minio/minio:latest
+    container_name: filmy-minio
+    restart: always
+    command: server /data --console-address ":9001"
+    env_file:
+      - ../backend/.env.prod
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - filmy-network
+
+  mlflow:
+    build:
+      context: .
+      dockerfile: Dockerfile.mlflow
+    container_name: filmy-mlflow
+    restart: always
+    depends_on:
+      - postgres
+      - minio
+    env_file:
+      - ../backend/.env.prod
+    command: >
+      mlflow server
+        --backend-store-uri postgresql://filmy:filmy@postgres:5432/mlflow_db
+        --default-artifact-root s3://mlflow-artifacts/
+        --host 0.0.0.0 --port 5000
+    ports:
+      - "5500:5000"
+    networks:
+      - filmy-network
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -82,10 +107,45 @@ services:
     networks:
       - filmy-network
 
+  prefect-server:
+    image: prefecthq/prefect:3-latest
+    container_name: filmy-prefect-server
+    restart: always
+    env_file:
+      - ../backend/.env.prod
+    environment:
+      PREFECT_API_URL: "http://localhost:4200/api"
+    depends_on:
+      - postgres
+    command: prefect server start --host 0.0.0.0
+    ports:
+      - "4200:4200"
+    networks:
+      - filmy-network
+
+  prefect-worker:
+    build:
+      context: ../backend
+      dockerfile: ops/Dockerfile.worker
+    container_name: filmy-prefect-worker
+    restart: always
+    env_file:
+      - ../backend/.env.prod
+    depends_on:
+      - mlflow
+      - minio
+      - prefect-server
+    networks:
+      - filmy-network
+    volumes:
+      - ../backend/app:/app/app
+
 volumes:
   postgres_data:
   pgadmin_data:
+  minio_data:
   qdrant_data:
+
 
 networks:
   filmy-network:

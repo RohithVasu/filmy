@@ -8,7 +8,7 @@ from app.core.qdrant import get_qdrant_client
 from app.model_handlers.movie_handler import MovieHandler
 from app.model_handlers.user_handler import UserHandler
 from app.model_handlers.user_feedback_handler import UserFeedbackHandler
-from app.ml.loaders.model_loader import load_implicit_artifacts
+from app.utils.model_loader import load_latest_production_model
 
 from loguru import logger
 
@@ -20,53 +20,33 @@ class RecommendationService:
         self.feedback_handler = UserFeedbackHandler(db)
         self.qdrant = get_qdrant_client()
 
-        # implicit artifacts
-        self.implicit_model = None
-        self.dataset_map = None
-        self.item_factors = None
-        self.user_factors = None
-        self._load_implicit()
-
-    def _load_implicit(self):
-        try:
-            model, dataset_map, item_factors, user_factors = load_implicit_artifacts()
-            self.implicit_model = model
-            self.dataset_map = dataset_map
-            self.item_factors = item_factors
-            self.user_factors = user_factors
-            if model:
-                print("✅ Loaded implicit model and artifacts")
-        except Exception as e:
-            print("No implicit model available:", e)
-            self.implicit_model = None
-            self.dataset_map = None
+        # Load ALS from MLflow registry
+        self.implicit_model, self.dataset_map, self.item_factors, self.user_factors = \
+            load_latest_production_model()
 
     def _rerank_with_implicit(self, user_id: int, candidate_ids: List[int]):
+        if not self.implicit_model:
+            return candidate_ids
+
         user_map = self.dataset_map["user_map"]
         item_map = self.dataset_map["item_map"]
-        inv_item_map = self.dataset_map["inv_item_map"]
 
-        # Can't rerank if user not in ALS model
         if user_id not in user_map:
             return candidate_ids
 
         uidx = user_map[user_id]
         user_vec = self.user_factors[uidx]
 
-        # keep only items known to ALS
         filtered = [cid for cid in candidate_ids if cid in item_map]
         if not filtered:
             return candidate_ids
 
         indices = [item_map[c] for c in filtered]
         item_vecs = self.item_factors[indices]
-
         scores = item_vecs.dot(user_vec)
+
         order = np.argsort(-scores)
-        reranked = [filtered[i] for i in order]
-
-        return reranked
-
+        return [filtered[i] for i in order]
 
     def recommend_for_cold_start(self, user_id: int, limit: int = 10):
 

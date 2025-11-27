@@ -1,0 +1,21 @@
+FROM python:3.10-slim
+
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    gcc \
+    g++ \
+    libopenblas-dev \
+    liblapack-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# COPY backend/app → inside container /app/app
+COPY app /app/app
+
+# Install only the flow dependencies
+RUN pip install --no-cache-dir prefect mlflow pandas numpy \
+    sentence-transformers qdrant-client sqlalchemy tqdm scikit-learn scipy implicit
+
+CMD ["prefect", "worker", "start", "--pool", "filmy-pool"]
