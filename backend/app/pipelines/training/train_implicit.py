@@ -1,5 +1,4 @@
 import os
-import shutil
 import json
 import mlflow
 import mlflow.pyfunc
@@ -39,26 +38,57 @@ CONFIG_PATH = os.path.abspath(os.path.join(CURRENT_DIR, "..", "data", "generate_
 DATA_CONFIG = json.load(open(CONFIG_PATH))
 
 
+# ------------------------------------------
+# Helper: Get current production model stats
+# ------------------------------------------
+def get_current_production_metrics(model_name="filmy_implicit_model"):
+    client = MlflowClient()
+    versions = client.search_model_versions(
+        f"name='{model_name}' and tags.stage='production'"
+    )
+
+    if not versions:
+        return None, None, None  # No production model yet
+
+    v = versions[0]
+    run = mlflow.get_run(v.run_id)
+
+    p10 = run.data.metrics.get("precision_at_10")
+    r10 = run.data.metrics.get("recall_at_10")
+
+    return v, p10, r10
+
+
+def is_better(new_p10, new_r10, old_p10, old_r10):
+    """Return True if new model clearly outperforms production."""
+    # No production model yet → promote unconditionally
+    if old_p10 is None or old_r10 is None:
+        return True
+
+    # Strict: must exceed precision AND at least match recall
+    return (new_p10 > old_p10) and (new_r10 >= old_r10)
+
+
+# ------------------------------------------
+# TRAIN FUNCTION
+# ------------------------------------------
 def train():
     logger.info("Connecting to database...")
     db = next(get_global_db_session())
 
-    # Load feedbacks
+    # Load feedback
     feedbacks = load_feedbacks_from_db(db)
-    logger.info(f"Loaded {len(feedbacks)} feedback rows.")
+    logger.info(f"Loaded {len(feedbacks)} feedback rows")
 
-    # Build mapping
+    # Build maps
     dataset_map = build_dataset_map(feedbacks)
     user_map = dataset_map["user_map"]
     item_map = dataset_map["item_map"]
 
-    logger.info(f"Users={len(user_map)}, Items={len(item_map)}")
-
-    # Build sparse matrix (item × user)
+    # Sparse matrix
     interactions = build_interaction_matrix(
         feedbacks, user_map, item_map, alpha=ALPHA
     )
-    logger.info(f"Matrix shape = {interactions.shape}")
 
     # MLflow setup
     mlflow.set_tracking_uri(MLFLOW_URI)
@@ -68,10 +98,8 @@ def train():
         run_id = run.info.run_id
         logger.info(f"Run ID = {run_id}")
 
-        # Log data config
+        # Log config + params
         mlflow.log_params({f"data_{k}": v for k, v in DATA_CONFIG.items()})
-
-        # Log training params
         mlflow.log_params({
             "factors": FACTORS,
             "regularization": REGULARIZATION,
@@ -82,7 +110,7 @@ def train():
         })
 
         # Train ALS
-        logger.info("Training ALS...")
+        logger.info("Training ALS model...")
         model = AlternatingLeastSquares(
             factors=FACTORS,
             regularization=REGULARIZATION,
@@ -96,20 +124,18 @@ def train():
         mlflow.log_metric("precision_at_10", p10)
         mlflow.log_metric("recall_at_10", r10)
 
-        # Save artifacts (pickle, numpy)
+        # Save artifacts
         artifact_dir = save_artifacts_to_tempdir(
-            model=model,
-            dataset_map=dataset_map,
-            interactions=interactions,
-            temp_dir=ARTIFACT_TEMP_DIR
+            model, dataset_map, interactions, ARTIFACT_TEMP_DIR
         )
         mlflow.log_artifacts(artifact_dir)
-        logger.info(f"Artifacts logged: {artifact_dir}")
 
-        # Register MLflow PyFunc Model
+        # Register Model
         conda_env = mlflow.pyfunc.get_default_conda_env()
         input_example = np.random.rand(1, FACTORS)
-        signature = mlflow.models.infer_signature(input_example, input_example @ np.random.rand(FACTORS, FACTORS))
+        signature = mlflow.models.infer_signature(
+            input_example, input_example @ np.random.rand(FACTORS, FACTORS)
+        )
 
         mlflow.pyfunc.log_model(
             name="als_model",
@@ -126,23 +152,41 @@ def train():
             },
         )
 
-        logger.info("MLflow model logged and registered.")
+        logger.info("Model logged in MLflow registry")
 
+        # Get newly logged version
         client = MlflowClient()
-
-        # Get latest registered version
         versions = client.search_model_versions("name='filmy_implicit_model'")
         latest = max(versions, key=lambda v: int(v.version))
 
-        # Mark this version as production
-        client.set_model_version_tag(
-            name="filmy_implicit_model",
-            version=latest.version,
-            key="stage",
-            value="production"
-        )
+        # Compare with production
+        prod_version, prod_p10, prod_r10 = get_current_production_metrics()
 
-        logger.info(f"🔥 Model version {latest.version} tagged as PRODUCTION")
+        logger.info(f"Production p10={prod_p10}, r10={prod_r10}")
+        logger.info(f"New p10={p10}, r10={r10}")
+
+        if is_better(p10, r10, prod_p10, prod_r10):
+            logger.info("🎉 New model outperforms production → promoting")
+
+            # Promote new model
+            client.set_model_version_tag(
+                name="filmy_implicit_model",
+                version=latest.version,
+                key="stage",
+                value="production"
+            )
+
+            # Remove tag from old model
+            if prod_version:
+                client.delete_model_version_tag(
+                    name="filmy_implicit_model",
+                    version=prod_version.version,
+                    key="stage"
+                )
+
+            logger.info(f"🔥 Model v{latest.version} promoted to PRODUCTION")
+        else:
+            logger.info("❌ New model NOT better → skip promotion")
 
     logger.info("Training complete.")
     return run_id

@@ -92,7 +92,7 @@ generate-synthetic-feedbacks:
 ingest-tmdb:
 	@if [ -f backend/.env.dev ]; then \
 		export $$(cat backend/.env.dev | grep -v '^#' | xargs) && \
-		cd backend && .venv/bin/python3 -m app.pipelines.data.ingest_tmdb; \
+		cd backend && .venv/bin/python -m app.pipelines.data.ingest_tmdb; \
 	else \
 		echo "Error: backend/.env.dev not found."; \
 		exit 1; \

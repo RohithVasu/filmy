@@ -8,8 +8,8 @@ from loguru import logger
 from app.core.settings import settings
 
 MINIO_ENDPOINT = settings.minio.endpoint
-MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY", "minio")
-MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY", "minio123")
+MINIO_ACCESS_KEY = os.getenv("MINIO_ACCESS_KEY")
+MINIO_SECRET_KEY = os.getenv("MINIO_SECRET_KEY")
 MINIO_SECURE = os.getenv("MINIO_SECURE", "false").lower() in ("1", "true", "yes")
 DATA_BUCKET = settings.minio.data_bucket
 DVC_REMOTE = settings.dvc.remote
@@ -26,7 +26,7 @@ def get_s3fs():
 # MinIO client (for small metadata)
 def get_minio_client():
     return Minio(
-        MINIO_ENDPOINT,
+        endpoint=MINIO_ENDPOINT,
         access_key=MINIO_ACCESS_KEY,
         secret_key=MINIO_SECRET_KEY,
         secure=MINIO_SECURE
@@ -63,7 +63,7 @@ def dvc_config_remote():
     # Assumes dvc installed and repo root is working dir
     endpoint = f"http://{MINIO_ENDPOINT}"
     cmds = [
-        ["dvc", "remote", "add", "-d", DVC_REMOTE, f"s3://dvc-store"],
+        ["dvc", "remote", "add", "-d", DVC_REMOTE, f"s3://filmy-dvc"],
         ["dvc", "remote", "modify", DVC_REMOTE, "endpointurl", endpoint],
         ["dvc", "remote", "modify", DVC_REMOTE, "access_key_id", MINIO_ACCESS_KEY],
         ["dvc", "remote", "modify", DVC_REMOTE, "secret_access_key", MINIO_SECRET_KEY],

@@ -22,12 +22,12 @@ from app.pipelines.utils.tmdb_client import (
     fetch_movie,
 )
 
-from app.core.settings import Settings
+from app.core.settings import settings
 from app.pipelines.utils.index_embeddings import embed_and_index
 
 
 BUCKET = os.getenv("MINIO_DATA_BUCKET", "filmy-data")
-MASTER_KEY = "tmdb_dataset_cleaned.parquet"
+MASTER_KEY = "cleaned/tmdb_dataset_cleaned.parquet"
 S3_ROOT = f"s3://{BUCKET}"
 MASTER_PATH = f"{S3_ROOT}/{MASTER_KEY}"
 
@@ -172,7 +172,7 @@ def run_daily_ingest():
     logger.info(f"Fetching movies since {last_ingest}")
 
     # 1. Discover new movies
-    movie_ids = discover_new_movie_ids(last_ingest)
+    movie_ids = discover_new_movie_ids("2025-11-20")
 
     rows = []
     for mid in movie_ids:

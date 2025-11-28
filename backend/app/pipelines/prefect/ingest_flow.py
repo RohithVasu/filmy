@@ -10,7 +10,7 @@ def ingest_task():
     return res
 
 
-@flow(name="daily_ingest_flow")
+@flow(name="ingest_flow")
 def run_ingest():
     ingest_task()
 

@@ -12,24 +12,28 @@ fi
 echo "🔧 ENV_FOR_DYNACONF = $ENV_FOR_DYNACONF"
 
 # --------------------------------------
-# Select correct env file
-# --------------------------------------
-ENV_FILE=".env.dev"
-
-if [ -f "$ENV_FILE" ]; then
-    echo "📦 Loading $ENV_FILE"
-    export $(grep -v '^#' "$ENV_FILE" | xargs)
-else
-    echo "⚠️  $ENV_FILE not found — continuing without it"
-fi
-
-# --------------------------------------
 # Detect if running inside Docker
 # --------------------------------------
 if [ -f /.dockerenv ]; then
     IS_DOCKER=true
 else
     IS_DOCKER=false
+fi
+
+# --------------------------------------
+# Select correct env file
+# --------------------------------------
+if [ "$IS_DOCKER" = true ]; then
+    ENV_FILE=".env.prod"
+else
+    ENV_FILE=".env.dev"
+fi
+
+if [ -f "$ENV_FILE" ]; then
+    echo "📦 Loading $ENV_FILE"
+    export $(grep -v '^#' "$ENV_FILE" | xargs)
+else
+    echo "⚠️  $ENV_FILE not found — continuing without it"
 fi
 
 # --------------------------------------

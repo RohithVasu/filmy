@@ -2,7 +2,9 @@ import os
 import mlflow
 import mlflow.pyfunc
 from mlflow.tracking import MlflowClient
+
 from loguru import logger
+
 
 def load_latest_production_model(model_name="filmy_implicit_model"):
     MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5500")
@@ -18,14 +20,12 @@ def load_latest_production_model(model_name="filmy_implicit_model"):
         return None, None, None, None
 
     v = versions[0]
-    logger.info(f"Loading Production model v{v.version}")
+    run_id = v.run_id
+    print(f"📦 Loading Production model v{v.version}")
 
-    model = mlflow.pyfunc.load_model(f"models:/{model_name}/{v.version}")
+    pyfunc_model = mlflow.pyfunc.load_model(f"models:/{model_name}/{v.version}")
 
-    dataset_map = model.dataset_map
-    item_factors = model.item_factors
-    user_factors = model.user_factors
+    # Access actual PythonModel (ALSModelWrapper)
+    wrapper = pyfunc_model._model_impl.python_model
 
-    logger.info("Model loaded successfully.")
-
-    return model, dataset_map, item_factors, user_factors
+    return wrapper, wrapper.dataset_map, wrapper.item_factors, wrapper.user_factors, run_id

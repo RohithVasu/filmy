@@ -25,8 +25,20 @@ services:
       - "8001:8001"
     env_file:
       - ../frontend/.env
-    depends_on:
-      - backend
+    # depends_on:
+    #   - backend
+    networks:
+      - filmy-network
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: filmy-qdrant
+    restart: always
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
     networks:
       - filmy-network
 
@@ -85,6 +97,8 @@ services:
       - minio
     env_file:
       - ../backend/.env.prod
+    environment:
+      MLFLOW_SERVER_ALLOWED_HOSTS: "*"
     command: >
       mlflow server
         --backend-store-uri postgresql://filmy:filmy@postgres:5432/mlflow_db
@@ -92,18 +106,6 @@ services:
         --host 0.0.0.0 --port 5000
     ports:
       - "5500:5000"
-    networks:
-      - filmy-network
-
-  qdrant:
-    image: qdrant/qdrant:latest
-    container_name: filmy-qdrant
-    restart: always
-    ports:
-      - "6333:6333"
-      - "6334:6334"
-    volumes:
-      - qdrant_data:/qdrant/storage
     networks:
       - filmy-network
 
@@ -137,8 +139,6 @@ services:
       - prefect-server
     networks:
       - filmy-network
-    volumes:
-      - ../backend/app:/app/app
 
 volumes:
   postgres_data:

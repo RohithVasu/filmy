@@ -10,6 +10,8 @@ from app.model_handlers.user_handler import UserHandler
 from app.model_handlers.user_feedback_handler import UserFeedbackHandler
 from app.utils.model_loader import load_latest_production_model
 
+from app.model_state import MODEL_CACHE
+
 from loguru import logger
 
 class RecommendationService:
@@ -20,9 +22,10 @@ class RecommendationService:
         self.feedback_handler = UserFeedbackHandler(db)
         self.qdrant = get_qdrant_client()
 
-        # Load ALS from MLflow registry
-        self.implicit_model, self.dataset_map, self.item_factors, self.user_factors = \
-            load_latest_production_model()
+        self.implicit_model = MODEL_CACHE["implicit_model"]
+        self.dataset_map = MODEL_CACHE["dataset_map"]
+        self.item_factors = MODEL_CACHE["item_factors"]
+        self.user_factors = MODEL_CACHE["user_factors"]
 
     def _rerank_with_implicit(self, user_id: int, candidate_ids: List[int]):
         if not self.implicit_model:
@@ -63,7 +66,7 @@ class RecommendationService:
 
         query = f"Movies in genres: {', '.join(genres)}. Recommend good movies."
 
-        vec = self.qdrant.embedding_model.encode(query, normalize_embeddings=True)
+        vec = self.qdrant.embedding_model.encode(query, normalize_embeddings=True).tolist()
         results = self.qdrant.search_similar(movie_vector=vec, top=limit * 20)
 
         filtered = []
@@ -102,7 +105,7 @@ class RecommendationService:
                 else:
                     docs.append(ex)
             query = " ".join(docs)
-            vec = self.qdrant.embedding_model.encode(query, normalize_embeddings=True)
+            vec = self.qdrant.embedding_model.encode(query, normalize_embeddings=True).tolist()
             qres = self.qdrant.search_similar(movie_vector=vec, top=limit * 2)
             candidate_ids = [int(r["id"]) for r in qres if int(r["id"]) not in movie_ids]
             movies = [self.movie_handler.get_by_id(id) for id in candidate_ids]
@@ -150,7 +153,7 @@ class RecommendationService:
         query = " ".join(texts) if texts else None
 
         if query:
-            vec = self.qdrant.embedding_model.encode(query, normalize_embeddings=True)
+            vec = self.qdrant.embedding_model.encode(query, normalize_embeddings=True).tolist()
             candidates = self.qdrant.search_similar(movie_vector=vec, top=limit * 20)
             candidate_ids = [c["id"] for c in candidates if c["id"] in item_map]
         else:
@@ -213,7 +216,7 @@ class RecommendationService:
                     Keywords: {movie.keywords}
                     Language: {movie.original_language}
                 """.strip()
-            vec = self.qdrant.embedding_model.encode(movie_text, normalize_embeddings=True)
+            vec = self.qdrant.embedding_model.encode(movie_text, normalize_embeddings=True).tolist()
             qres = self.qdrant.search_similar(movie_vector=vec, top=limit*2)
             for r in qres:
                 mid = int(r["id"])
@@ -260,7 +263,7 @@ class RecommendationService:
         # Filter Mode
         else:
             query = "movies recommended to watch"
-            vector = self.qdrant.embedding_model.encode(query, normalize_embeddings=True)
+            vector = self.qdrant.embedding_model.encode(query, normalize_embeddings=True).tolist()
 
             raw_results = self.qdrant.search_similar(
                 movie_vector=vector,
@@ -303,7 +306,7 @@ class RecommendationService:
             """.strip()
         
         # Create vector from the movie text
-        vec = self.qdrant.embedding_model.encode(movie_text, normalize_embeddings=True)
+        vec = self.qdrant.embedding_model.encode(movie_text, normalize_embeddings=True).tolist()
         
         # Search for similar movies (get extra to account for filtering)
         qres = self.qdrant.search_similar(movie_vector=vec, top=limit + 10)

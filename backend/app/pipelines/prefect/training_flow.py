@@ -5,13 +5,14 @@ from datetime import datetime
 from prefect import flow, task, get_run_logger
 import mlflow
 
+from app.core.settings import settings
 from app.pipelines.training.train_implicit import train
 
-DB_USER = "filmy"
-DB_PASS = "filmy"
-DB_HOST = "localhost"
-DB_NAME = "filmy_db"
-DB_PORT = 5432
+DB_USER = settings.db.username
+DB_PASS = settings.DB_PASSWORD
+DB_HOST = settings.db.host
+DB_NAME = settings.db.database
+DB_PORT = settings.db.port
 
 POSTGRES_DSN = f"postgresql://{DB_USER}:{DB_PASS}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 MLFLOW_URI = os.getenv("MLFLOW_TRACKING_URI", "http://mlflow:5000")
@@ -40,9 +41,8 @@ def get_last_training_time_from_mlflow():
     if len(runs) == 0:
         return None
 
-    last_start_time_ms = runs.iloc[0]["start_time"]
-
-    return datetime.fromtimestamp(last_start_time_ms / 1000)
+    last_start_time = runs.iloc[0]["start_time"].to_pydatetime()
+    return last_start_time
 
 
 # ---------------------------------------------------------
